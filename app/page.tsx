@@ -872,7 +872,7 @@ export default function Home() {
               <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-amber-700">
-                    Warehouse 27
+                    Warehouse 31
                   </p>
                   <h2 className="mt-0.5 text-xl font-black tracking-tight text-zinc-950 sm:mt-1 sm:text-2xl">
                     Discount Eligible SKUs

@@ -3,7 +3,7 @@ import { getPool } from "@/lib/db";
 import { DiscountEligibleSku, DiscountEligibleSkuRaw } from "@/lib/types";
 import { fetchPricesForItems } from "./price-api";
 
-const DISCOUNT_ELIGIBLE_WAREHOUSE_ID = 27;
+const DISCOUNT_ELIGIBLE_WAREHOUSE_ID = 31;
 
 export async function fetchDiscountEligibleSkus(
   destinationPincode: string
