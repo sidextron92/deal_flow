@@ -5,11 +5,15 @@ import Image from "next/image";
 import {
   CalculatedCartItem,
   CartResponse,
+  DiscountEligibleSku,
   DiscountOverride,
 } from "@/lib/types";
 
 function formatCurrency(value: number): string {
-  return `₹${Math.round(value).toLocaleString("en-IN")}`;
+  return `₹${value.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatPct(value: number): string {
@@ -66,9 +70,20 @@ export default function Home() {
     Record<string, { amount: number; pct: number }>
   >({});
   const [cartLevelDiscount, setCartLevelDiscount] = useState(0);
+  const [isDiscountSheetOpen, setIsDiscountSheetOpen] = useState(false);
+  const [discountSkus, setDiscountSkus] = useState<DiscountEligibleSku[]>([]);
+  const [discountSkuPincode, setDiscountSkuPincode] = useState("");
+  const [discountSkuLoading, setDiscountSkuLoading] = useState(false);
+  const [discountSkuError, setDiscountSkuError] = useState<string | null>(null);
+  const [discountSkuSearch, setDiscountSkuSearch] = useState("");
+  const [discountSkuCategory, setDiscountSkuCategory] = useState("all");
+  const [isDiscountCategoryOpen, setIsDiscountCategoryOpen] = useState(false);
+  const [discountCategorySearch, setDiscountCategorySearch] = useState("");
 
   const phoneDigits = useMemo(() => phone.replace(/\D/g, ""), [phone]);
   const isValidPhone = phoneDigits.length === 10;
+  const cartPincode = data?.items.find((item) => item.pincode)?.pincode ?? "";
+  const showDiscountEligibleCta = Boolean(cartPincode);
 
   const loadCart = useCallback(async (phoneNumber: string) => {
     setLoading(true);
@@ -110,6 +125,36 @@ export default function Home() {
     }, 400);
     return () => clearTimeout(timer);
   }, [phoneDigits, isValidPhone, loadCart]);
+
+  async function openDiscountEligibleSheet() {
+    if (!cartPincode) return;
+    setIsDiscountSheetOpen(true);
+    setDiscountSkuSearch("");
+    setDiscountSkuCategory("all");
+    setDiscountCategorySearch("");
+    setIsDiscountCategoryOpen(false);
+
+    if (discountSkus.length > 0 && discountSkuPincode === cartPincode) return;
+
+    setDiscountSkuLoading(true);
+    setDiscountSkuError(null);
+    try {
+      const res = await fetch(
+        `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to load eligible SKUs");
+      }
+      setDiscountSkus(json.items ?? []);
+      setDiscountSkuPincode(cartPincode);
+    } catch (err) {
+      setDiscountSkuError(err instanceof Error ? err.message : "Unknown error");
+      setDiscountSkus([]);
+    } finally {
+      setDiscountSkuLoading(false);
+    }
+  }
 
   async function recalculateDeal() {
     if (!data) return;
@@ -256,7 +301,7 @@ export default function Home() {
     );
   }
 
-  const localSummary = useMemo(() => {
+  const localSummary = (() => {
     if (!data) return null;
     let totalCartValue = 0;
     let totalProfit = 0;
@@ -303,9 +348,9 @@ export default function Home() {
       cartLevelDiscountCap,
       cartLevelDiscountAmount,
     };
-  }, [data, quantities, discounts, cartLevelDiscount]);
+  })();
 
-  const hasChanges = useMemo(() => {
+  const hasChanges = (() => {
     if (!data) return false;
     return data.items.some((item) => {
       const key = toKey(item);
@@ -325,7 +370,40 @@ export default function Home() {
         (localSummary?.cartLevelDiscountAmount ?? 0) > 0
       );
     });
-  }, [data, quantities, discounts, baselineDiscounts, localSummary]);
+  })();
+
+  const discountSkuCategoryOptions = Array.from(
+    new Set(
+      discountSkus.map(
+        (item) => `${item.mainCategoryName} × ${item.categoryGroupName}`
+      )
+    )
+  ).sort();
+  const filteredDiscountSkuCategoryOptions = discountSkuCategoryOptions.filter(
+    (category) =>
+      category.toLowerCase().includes(discountCategorySearch.trim().toLowerCase())
+  );
+
+  const normalizedDiscountSkuSearch = discountSkuSearch.trim().toLowerCase();
+  const filteredDiscountSkus = discountSkus.filter((item) => {
+    const category = `${item.mainCategoryName} × ${item.categoryGroupName}`;
+    const matchesCategory =
+      discountSkuCategory === "all" || category === discountSkuCategory;
+    const matchesSearch =
+      normalizedDiscountSkuSearch.length === 0 ||
+      [
+        item.ProductName,
+        item.colorname,
+        item.sizetext,
+        item.mainCategoryName,
+        item.categoryGroupName,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedDiscountSkuSearch);
+
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-[#f6f3ee] pb-40 text-zinc-950">
@@ -340,9 +418,15 @@ export default function Home() {
               Best Deal Calculator
             </h1>
           </div>
-          <p className="hidden max-w-xs text-right text-sm leading-5 text-zinc-600 sm:block">
-            Fetch a customer cart and tune quantities or discounts before recalculating.
-          </p>
+          {showDiscountEligibleCta && (
+            <button
+              type="button"
+              onClick={openDiscountEligibleSheet}
+              className="rounded-2xl bg-amber-500 px-4 py-2.5 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/20 ring-1 ring-amber-300 transition active:scale-[0.98] hover:bg-amber-400"
+            >
+              Discount Eligible
+            </button>
+          )}
         </div>
       </header>
 
@@ -442,7 +526,7 @@ export default function Home() {
                               {item.ProductName}
                             </p>
                             <p className="mt-0.5 text-xs leading-5 text-zinc-500 sm:text-sm">
-                              {item.Brand} · {item.colorname}
+                              {item.colorname}
                             </p>
                             <p className="text-xs leading-4 text-zinc-500 sm:text-sm">
                               {item.sizetext}
@@ -778,6 +862,214 @@ export default function Home() {
               {hasChanges ? "Recalculate Deal" : "Deal Up-to-date"}
             </button>
           </div>
+        </div>
+      )}
+
+      {isDiscountSheetOpen && (
+        <div className="fixed inset-0 z-30 bg-zinc-950/45 backdrop-blur-sm">
+          <section className="absolute inset-x-0 bottom-0 flex h-[94vh] flex-col overflow-hidden rounded-t-[1.5rem] bg-[#f8f5ef] shadow-[0_-30px_100px_rgba(0,0,0,0.3)] ring-1 ring-white/60 sm:rounded-t-[2rem]">
+            <div className="relative z-40 border-b border-zinc-200/80 bg-white/80 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
+              <div className="mx-auto flex max-w-6xl items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-amber-700">
+                    Warehouse 27
+                  </p>
+                  <h2 className="mt-0.5 text-xl font-black tracking-tight text-zinc-950 sm:mt-1 sm:text-2xl">
+                    Discount Eligible SKUs
+                  </h2>
+                  <p className="mt-0.5 text-xs text-zinc-500 sm:mt-1 sm:text-sm">
+                    Prices mapped using customer pincode {cartPincode}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDiscountSheetOpen(false)}
+                  className="rounded-2xl bg-zinc-950 px-4 py-2 text-sm font-black text-white transition active:scale-[0.98]"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mx-auto mt-3 grid max-w-6xl grid-cols-[minmax(0,1fr)_9.5rem] gap-2 sm:mt-4 sm:grid-cols-[minmax(0,1fr)_18rem] sm:gap-3">
+                <div className="rounded-2xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-200/80 sm:px-4 sm:py-3">
+                  <label
+                    htmlFor="discount-sku-search"
+                    className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 sm:text-xs"
+                  >
+                    Search
+                  </label>
+                  <input
+                    id="discount-sku-search"
+                    type="search"
+                    value={discountSkuSearch}
+                    onChange={(e) => setDiscountSkuSearch(e.target.value)}
+                    placeholder="Product, color, size"
+                    className="mt-0.5 w-full bg-transparent text-sm font-semibold text-zinc-950 outline-none placeholder:text-zinc-400 sm:mt-1 sm:text-base"
+                  />
+                </div>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsDiscountCategoryOpen((open) => !open)}
+                    className="h-full w-full rounded-2xl bg-white px-3 py-2.5 text-left shadow-sm ring-1 ring-zinc-200/80 sm:px-4 sm:py-3"
+                  >
+                    <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 sm:text-xs">
+                      Category
+                    </span>
+                    <span className="mt-0.5 flex items-center justify-between gap-2 text-sm font-extrabold text-zinc-950 sm:mt-1 sm:text-base">
+                      <span className="truncate">
+                        {discountSkuCategory === "all"
+                          ? "All"
+                          : discountSkuCategory}
+                      </span>
+                      <span className="text-zinc-400">⌄</span>
+                    </span>
+                  </button>
+
+                  {isDiscountCategoryOpen && (
+                    <div className="absolute right-0 top-full z-50 mt-2 max-h-80 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200">
+                      <div className="border-b border-zinc-100 p-2">
+                        <input
+                          type="search"
+                          value={discountCategorySearch}
+                          onChange={(e) => setDiscountCategorySearch(e.target.value)}
+                          placeholder="Search categories"
+                          className="w-full rounded-xl bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-950 outline-none ring-1 ring-zinc-200 placeholder:text-zinc-400"
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-y-auto p-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDiscountSkuCategory("all");
+                            setIsDiscountCategoryOpen(false);
+                          }}
+                          className="w-full rounded-xl px-3 py-2 text-left text-sm font-bold text-zinc-950 hover:bg-amber-50"
+                        >
+                          All categories
+                        </button>
+                        {filteredDiscountSkuCategoryOptions.map((category) => (
+                          <button
+                            key={category}
+                            type="button"
+                            onClick={() => {
+                              setDiscountSkuCategory(category);
+                              setIsDiscountCategoryOpen(false);
+                            }}
+                            className="w-full rounded-xl px-3 py-2 text-left text-sm font-bold text-zinc-700 hover:bg-amber-50"
+                          >
+                            {category}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative z-0 min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+              <div className="mx-auto max-w-6xl">
+                {discountSkuLoading ? (
+                  <div className="rounded-3xl bg-white p-8 text-center text-sm font-bold text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
+                    Loading discount eligible SKUs...
+                  </div>
+                ) : discountSkuError ? (
+                  <div className="rounded-3xl bg-red-50 p-8 text-center text-sm font-bold text-red-700 ring-1 ring-red-200">
+                    {discountSkuError}
+                  </div>
+                ) : filteredDiscountSkus.length === 0 ? (
+                  <div className="rounded-3xl bg-white p-8 text-center text-sm font-bold text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
+                    No discount eligible SKUs found.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {filteredDiscountSkus.map((item) => (
+                      <article
+                        key={`${item.variantid}|${item.sizeid}`}
+                        className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80"
+                      >
+                        <div className="flex gap-3 p-3 sm:p-4">
+                          <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200 sm:h-32 sm:w-28">
+                            {item.imageurl ? (
+                              <Image
+                                src={item.imageurl}
+                                alt={item.ProductName}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
+                                No img
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="grid grid-cols-[minmax(0,1fr)_6.75rem] items-start gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
+                              <div className="min-w-0">
+                                <p className="line-clamp-1 text-sm font-extrabold leading-5 text-zinc-950 sm:line-clamp-2 sm:text-base">
+                                  {item.ProductName}
+                                </p>
+                                <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-4 text-zinc-500">
+                                  {item.colorname} · {item.sizetext}
+                                </p>
+                              </div>
+                              <span className="rounded-full bg-green-100 px-2 py-1 text-center text-[11px] font-extrabold leading-3 text-green-800 ring-1 ring-green-200 sm:text-xs sm:leading-4">
+                                Max {formatPct(item.eligibleDiscount)} off
+                              </span>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                              <div className="min-w-0 rounded-2xl bg-amber-50 p-2 ring-1 ring-amber-100">
+                                <p className="text-[11px] font-extrabold leading-3 text-amber-700">Landing Price</p>
+                                <p className="mt-1 text-[15px] font-black leading-5 text-zinc-950 sm:text-base">
+                                  {formatCurrency(item.landingPrice)}
+                                </p>
+                              </div>
+                              <div className="min-w-0 rounded-2xl bg-green-50 p-2 ring-1 ring-green-100">
+                                <p className="text-[11px] font-extrabold leading-3 text-green-700">Max Discounted Price</p>
+                                <p className="mt-1 text-[15px] font-black leading-5 text-zinc-950 sm:text-base">
+                                  {formatCurrency(
+                                    item.landingPrice *
+                                      (1 - item.eligibleDiscount / 100)
+                                  )}
+                                </p>
+                              </div>
+                              <div className="min-w-0 rounded-2xl bg-white p-2 ring-1 ring-zinc-200">
+                                <p className="text-[11px] font-extrabold leading-3 text-zinc-500">Stock Left</p>
+                                <p className="mt-1 text-sm font-black leading-5 text-zinc-950">
+                                  {item.CurrentInventory} sets
+                                </p>
+                              </div>
+
+                              {item.MRP > 0 && (
+                                <div className="min-w-0 rounded-2xl bg-zinc-50 p-2 ring-1 ring-zinc-100">
+                                  <p className="text-[11px] font-extrabold leading-3 text-zinc-500">MRP / Margin</p>
+                                  <p className="mt-1 text-sm font-black leading-5 text-zinc-950">
+                                    {formatCurrency(item.MRP)} ·{" "}
+                                    {item.retailMarginPct === null
+                                      ? "N/A"
+                                      : formatPct(item.retailMarginPct)}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            <p className="mt-2 truncate text-[11px] font-semibold text-zinc-400">
+                              {item.mainCategoryName} × {item.categoryGroupName}
+                            </p>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
       )}
     </div>

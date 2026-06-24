@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { fetchCartFromMySQL } from "@/lib/services/mysql";
 import { fetchPricesForCart } from "@/lib/services/price-api";
 import { calculateCart } from "@/lib/services/calculator";
-import { CartItemRaw, DiscountOverride } from "@/lib/types";
+import { DiscountOverride } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 

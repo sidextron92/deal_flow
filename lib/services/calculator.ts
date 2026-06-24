@@ -6,43 +6,6 @@ import {
   PriceData,
 } from "@/lib/types";
 
-// Placeholder business constraints. Adjust later when finalised.
-const MIN_PROFIT_MARGIN_PCT = 5; // do not let post-discount margin fall below this
-const MAX_ITEM_DISCOUNT_PCT = 25; // hard ceiling on any single item
-
-function calculateItemMaxDiscountPct(item: CartItemRaw): number {
-  // Placeholder rule engine. Replace with real business rules later.
-  let pct = 5;
-
-  if (item.CurrentInventory > 200) pct += 3;
-  if (item.Ageing > 90) pct += 5;
-  if (item.DaysFromLastOrder > 30) pct += 2;
-  if (item.BrandType === "Private Label") pct += 3;
-
-  return Math.min(pct, MAX_ITEM_DISCOUNT_PCT);
-}
-
-function clampItemDiscountByMargin(
-  item: CartItemRaw & PriceData,
-  desiredPct: number
-): number {
-  const pieces = item.setCount * item.lotSize;
-  const totalValue = pieces * item.landingPrice;
-  const lineValueExTax = pieces * item.landingPriceBeforeTax;
-  const cost = pieces * item.purchasePriceWithoutTax;
-
-  // Keep the cap aligned with the margin displayed in the UI.
-  // We need: (ex-tax profit - discount) / totalValue >= MIN_PROFIT_MARGIN_PCT
-  // Solve for max discount amount, then convert to pct of totalValue.
-  const minProfit = (MIN_PROFIT_MARGIN_PCT / 100) * totalValue;
-  const maxDiscountAmount = lineValueExTax - cost - minProfit;
-
-  if (maxDiscountAmount <= 0) return 0;
-
-  const marginCapPct = (maxDiscountAmount / totalValue) * 100;
-  return Math.min(desiredPct, Math.max(0, marginCapPct));
-}
-
 function getDiscountOverride(
   variantid: number,
   sizeid: number,
@@ -83,11 +46,7 @@ export function calculateCart(
     const profitAmount = lineValueExTax - cost;
     const profitMarginPct = totalValue > 0 ? (profitAmount / totalValue) * 100 : 0;
 
-    const desiredDiscountPct = calculateItemMaxDiscountPct(raw);
-    const maxDiscountPct = clampItemDiscountByMargin(
-      { ...raw, ...price },
-      desiredDiscountPct
-    );
+    const maxDiscountPct = Math.max(0, raw.eligibleDiscount);
     const maxDiscountAmount = (maxDiscountPct / 100) * totalValue;
 
     const override = getDiscountOverride(raw.variantid, raw.sizeid, discountOverrides);

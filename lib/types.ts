@@ -14,15 +14,9 @@ export interface CartItemRaw {
   colorname: string;
   sizetext: string;
   imageurl: string;
-  SubCategory: string;
-  GroupName: string;
-  MainCategory: string;
-  Brand: string;
-  BrandType: string;
-  DaysFromLastOrder: number;
-  Ageing: number;
   CurrentInventory: number;
   pincode: string;
+  eligibleDiscount: number;
 }
 
 export interface PriceData {
@@ -70,4 +64,27 @@ export interface CartResponse {
   phone: string;
   items: CalculatedCartItem[];
   summary: DealSummary;
+}
+
+export interface DiscountEligibleSkuRaw {
+  warehouseid: number;
+  productId: number;
+  variantid: number;
+  sizeid: number;
+  MRP: number;
+  purchasePriceWithoutTax: number;
+  retailerMargin: number;
+  ProductName: string;
+  colorname: string;
+  sizetext: string;
+  imageurl: string;
+  CurrentInventory: number;
+  eligibleDiscount: number;
+  performanceData: string | null;
+  categoryGroupName: string;
+  mainCategoryName: string;
+}
+
+export interface DiscountEligibleSku extends DiscountEligibleSkuRaw, PriceData {
+  retailMarginPct: number | null;
 }

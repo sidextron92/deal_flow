@@ -8,8 +8,8 @@ export async function fetchCartFromMySQL(phone: string): Promise<CartItemRaw[]> 
   const pool = getPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     `
-WITH cart_items AS (
-  SELECT 
+  SELECT
+    ad.zipcode                       AS pincode,
     ti.userID                        AS userid,
     ti.sellerID                      AS sellerid,
     sma.fmWarehouseId                AS fmWarehouseid,
@@ -26,7 +26,7 @@ WITH cart_items AS (
     sm.sizeText                      AS sizetext,
     v.defImage                       AS imageurl,
     vss.quantity                     AS CurrentInventory,
-    ad.zipcode                       AS pincode
+    COALESCE(psds.eligibleDiscount,0) AS eligibleDiscount
   FROM truck_items ti
   INNER JOIN address_details ad ON ad.userID = ti.userID AND ad.isSelected = 1
   INNER JOIN user_master um     ON um.userid = ti.userid
@@ -39,73 +39,21 @@ WITH cart_items AS (
   INNER JOIN colors c           ON c.uniqueId = ti.colorID
   INNER JOIN size_master sm     ON sm.sizeID = ti.sizeID
   INNER JOIN seller_master sma  ON sma.userid = ti.sellerID
+  LEFT JOIN pre_shelfout_discount_skus psds
+          ON psds.variantId = ti.variantID
+         AND psds.sizeId = ti.sizeID
+         AND psds.warehouseId = sma.fmWarehouseId
+         AND psds.status = 1
+         AND (psds.endDate IS NULL OR psds.endDate > CURDATE())
   WHERE ti.status = 0
     AND ti.sellerid = ?
     AND um.companyPhone = ?
     AND ti.orderType = 'OnStock'
     AND vss.isVisible = 1
-  GROUP BY ti.sellerID, ti.variantID, ti.sizeID
-),
-
-last_order AS (
-  SELECT
-    od.variantID,
-    od.sizeID,
-    o.sellerID,
-    MIN(DATEDIFF(CURDATE(), o.created_at)) AS lastOrderAgo
-  FROM order_details od
-  INNER JOIN orders o ON o.orderID = od.orderID
-  INNER JOIN cart_items ci
-          ON ci.variantId = od.variantID
-         AND ci.sizeId    = od.sizeID
-         AND ci.sellerID  = o.sellerID
-         AND o.delAddressId = 1
-         AND od.remainingSetCount > 0
-         AND o.createdOn > UNIX_TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL - 30 DAY))
-         AND o.sellerID = ?
-  GROUP BY od.variantID, od.sizeID, o.sellerID
-)
-
-SELECT
-  ci.userid,
-  ci.sellerid,
-  ci.fmWarehouseid,
-  ci.productId,
-  ci.variantid,
-  ci.sizeid,
-  ci.setCount,
-  ci.purchasePriceWithoutTax,
-  ci.MRP,
-  ci.retailerMargin,
-  ci.lotSize,
-  ci.ProductName,
-  ci.colorname,
-  ci.sizetext,
-  ci.imageurl,
-  NULL                              AS SubCategory,
-  NULL                              AS GroupName,
-  NULL                              AS MainCategory,
-  NULL                              AS Brand,
-  NULL                              AS BrandType,
-  COALESCE(lo.lastOrderAgo, 30)    AS DaysFromLastOrder,
-  MAX(DATEDIFF(CURRENT_DATE, FROM_UNIXTIME(rmlla.startEventDate))) AS Ageing,
-  ci.CurrentInventory,
-  ci.pincode
-FROM rm_lot_level_attribution rmlla
-INNER JOIN cart_items ci
-        ON rmlla.variantID  = ci.variantID
-       AND rmlla.sizeID     = ci.sizeID
-       AND rmlla.warehouseid = ci.fmWarehouseid
-LEFT JOIN last_order lo
-        ON rmlla.variantID = lo.variantID
-       AND rmlla.sizeID    = lo.sizeID
-WHERE rmlla.activeStatus = 1
-  AND rmlla.isRemoved   = 0
-  AND rmlla.soldDate    = 0
-  AND rmlla.lotId       > 0
-GROUP BY rmlla.variantId, rmlla.sizeId, rmlla.warehouseid;
+    AND vss.quantity > 0
+  GROUP BY ti.sellerID, ti.variantID, ti.sizeID;
     `,
-    [SELLER_ID, phone, SELLER_ID]
+    [SELLER_ID, phone]
   );
 
   console.log("[mysql] query returned rows:", rows.length, "rows");

@@ -4,13 +4,32 @@ const PRICE_API_URL =
   "https://api.bijnis.com/g/ss/price-engine/get-variant-price-detail-v2";
 const PRICE_API_TOKEN = "k6w+9:x@UNi8";
 
-export async function fetchPricesForCart(
-  items: CartItemRaw[]
+type PriceApiDiscountInfo = {
+  subtotal?: number;
+  total?: number;
+  size_sets?: Record<string, { subtotal?: number; total?: number }>;
+};
+
+type PriceApiVariantData = {
+  discount_info_resp?: PriceApiDiscountInfo;
+  finalPriceBeforTax?: number;
+};
+
+type PriceLookupItem = {
+  variantid: number;
+  sizeid: number;
+  purchasePriceWithoutTax: number;
+  MRP: number;
+  pincode?: string;
+};
+
+export async function fetchPricesForItems(
+  items: PriceLookupItem[],
+  destinationPincode = items[0]?.pincode
 ): Promise<PriceData[]> {
   if (items.length === 0) return [];
 
   const variantIds = [...new Set(items.map((i) => i.variantid))];
-  const destinationPincode = items[0].pincode;
 
   const res = await fetch(PRICE_API_URL, {
     method: "POST",
@@ -22,7 +41,7 @@ export async function fetchPricesForCart(
     body: JSON.stringify({
       variantIds,
       destinationPincode,
-      requestType: 2,
+      requestType: 3,
     }),
   });
 
@@ -38,7 +57,7 @@ export async function fetchPricesForCart(
     );
   }
 
-  const data = json.data as Record<string, any>;
+  const data = json.data as Record<string, PriceApiVariantData>;
 
   return items.map((item) => {
     const variantData = data[String(item.variantid)];
@@ -56,19 +75,29 @@ export async function fetchPricesForCart(
     }
 
     const discountInfo = variantData.discount_info_resp || {};
+    const sizePrice = discountInfo.size_sets?.[String(item.sizeid)];
+
     return {
       variantid: item.variantid,
       sizeid: item.sizeid,
       landingPriceBeforeTax:
+        sizePrice?.subtotal ??
         discountInfo.subtotal ??
         variantData.finalPriceBeforTax ??
         0,
       landingPrice:
+        sizePrice?.total ??
         discountInfo.total ??
         variantData.finalPriceBeforTax ??
         0,
     };
   });
+}
+
+export async function fetchPricesForCart(
+  items: CartItemRaw[]
+): Promise<PriceData[]> {
+  return fetchPricesForItems(items);
 }
 
 // Backward-compatible wrapper for single-item calls
@@ -93,17 +122,11 @@ export async function fetchPriceFromAPI(
     colorname: "",
     sizetext: "",
     imageurl: "",
-    SubCategory: "",
-    GroupName: "",
-    MainCategory: "",
-    Brand: "",
-    BrandType: "",
-    DaysFromLastOrder: 0,
-    Ageing: 0,
     CurrentInventory: 0,
     pincode: "",
+    eligibleDiscount: 0,
   };
 
-  const [price] = await fetchPricesForCart([dummyItem]);
+  const [price] = await fetchPricesForItems([dummyItem]);
   return price;
 }
