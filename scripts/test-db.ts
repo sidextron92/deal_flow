@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { RowDataPacket } from "mysql2";
-import pool from "../lib/db";
+import { getPool } from "../lib/db";
 
 const SELLER_ID = process.env.SELLER_ID || "1490492473";
 const TEST_PHONE = process.argv[2] || "9876543210";
@@ -15,6 +15,7 @@ async function test() {
   console.log("Test Phone:", TEST_PHONE);
 
   try {
+    const pool = getPool();
     const connection = await pool.getConnection();
     console.log("✅ Connected to MySQL");
 
