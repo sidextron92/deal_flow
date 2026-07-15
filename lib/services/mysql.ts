@@ -2,9 +2,13 @@ import { RowDataPacket } from "mysql2";
 import { CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
-const SELLER_ID = process.env.SELLER_ID || "1490492529";
-
-export async function fetchCartFromMySQL(phone: string): Promise<CartItemRaw[]> {
+// sellerId is the authenticated trader's seller (Gateway-injected `Seller-Id`),
+// NOT a hardcoded constant — a fixed seller returns an empty cart for traders
+// whose stock lives under a different seller.
+export async function fetchCartFromMySQL(
+  phone: string,
+  sellerId: string
+): Promise<CartItemRaw[]> {
   const pool = getPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     `
@@ -53,7 +57,7 @@ export async function fetchCartFromMySQL(phone: string): Promise<CartItemRaw[]> 
     AND vss.quantity > 0
   GROUP BY ti.sellerID, ti.variantID, ti.sizeID;
     `,
-    [SELLER_ID, phone]
+    [sellerId, phone]
   );
 
   console.log("[mysql] query returned rows:", rows.length, "rows");

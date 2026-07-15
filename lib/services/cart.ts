@@ -5,9 +5,10 @@ import { calculateCart } from "./calculator";
 
 export async function getCartWithDeal(
   phone: string,
+  sellerId: string,
   discountOverrides?: DiscountOverride[]
 ) {
-  const cartItems: CartItemRaw[] = await fetchCartFromMySQL(phone);
+  const cartItems: CartItemRaw[] = await fetchCartFromMySQL(phone, sellerId);
   const prices: PriceData[] = await fetchPricesForCart(cartItems);
 
   const { items, summary } = calculateCart(

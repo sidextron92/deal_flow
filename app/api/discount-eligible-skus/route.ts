@@ -1,10 +1,14 @@
 import { NextRequest } from "next/server";
 import { fetchDiscountEligibleSkus } from "@/lib/services/discount-eligible-skus";
+import { checkAuthKey } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const unauthorized = checkAuthKey(request);
+    if (unauthorized) return unauthorized;
+
     const pincode = request.nextUrl.searchParams.get("pincode");
 
     if (!pincode) {

@@ -8,6 +8,7 @@ import {
   DiscountEligibleSku,
   DiscountOverride,
 } from "@/lib/types";
+import { apiPath } from "@/lib/config";
 
 function formatCurrency(value: number): string {
   return `₹${value.toLocaleString("en-IN", {
@@ -89,7 +90,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/cart?phone=${phoneNumber}`);
+      const res = await fetch(apiPath(`/api/cart?phone=${phoneNumber}`));
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load cart");
       setData(json);
@@ -140,7 +141,9 @@ export default function Home() {
     setDiscountSkuError(null);
     try {
       const res = await fetch(
-        `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
+        apiPath(
+          `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
+        )
       );
       const json = await res.json();
       if (!res.ok) {
@@ -189,7 +192,7 @@ export default function Home() {
           };
         }),
       };
-      const res = await fetch("/api/cart", {
+      const res = await fetch(apiPath("/api/cart"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
