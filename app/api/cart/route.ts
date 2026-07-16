@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { fetchCartFromMySQL } from "@/lib/services/mysql";
+import { fetchCartExclusions, fetchCartFromMySQL } from "@/lib/services/mysql";
 import { fetchPricesForCart } from "@/lib/services/price-api";
 import { calculateCart } from "@/lib/services/calculator";
 import { DiscountOverride } from "@/lib/types";
@@ -23,11 +23,14 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: "seller context missing" }, { status: 400 });
     }
 
-    const cartItems = await fetchCartFromMySQL(phone, sellerId);
+    const [cartItems, excluded] = await Promise.all([
+      fetchCartFromMySQL(phone, sellerId),
+      fetchCartExclusions(phone, sellerId),
+    ]);
     const prices = await fetchPricesForCart(cartItems);
     const { items, summary } = calculateCart(cartItems, prices);
 
-    return Response.json({ phone, items, summary });
+    return Response.json({ phone, items, summary, excluded });
   } catch (err) {
     console.error("[API /cart GET] Error:", err);
     return Response.json(
@@ -62,7 +65,11 @@ export async function POST(request: NextRequest) {
       discounts?: DiscountOverride[];
     };
 
-    let cartItems = await fetchCartFromMySQL(phone, sellerId);
+    const [initialCartItems, excluded] = await Promise.all([
+      fetchCartFromMySQL(phone, sellerId),
+      fetchCartExclusions(phone, sellerId),
+    ]);
+    let cartItems = initialCartItems;
 
     if (Array.isArray(quantities) && quantities.length > 0) {
       const quantityMap = new Map(
@@ -83,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     const { items, summary } = calculateCart(cartItems, prices, discounts);
 
-    return Response.json({ phone, items, summary });
+    return Response.json({ phone, items, summary, excluded });
   } catch (err) {
     console.error("[API /cart POST] Error:", err);
     return Response.json(

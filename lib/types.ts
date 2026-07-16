@@ -60,10 +60,19 @@ export interface DealSummary {
   marginAfterDiscountPct: number;
 }
 
+// Cart lines that exist for this phone+seller but were filtered out of the deal
+// calculator: OnStock items with no sellable stock, and non-OnStock (pre-order)
+// items. Lets the UI explain an empty/partial cart instead of showing a blank.
+export interface CartExclusions {
+  outOfStock: number;
+  preOrder: number;
+}
+
 export interface CartResponse {
   phone: string;
   items: CalculatedCartItem[];
   summary: DealSummary;
+  excluded: CartExclusions;
 }
 
 export interface DiscountEligibleSkuRaw {

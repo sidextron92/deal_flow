@@ -1,5 +1,5 @@
 import { RowDataPacket } from "mysql2";
-import { CartItemRaw } from "@/lib/types";
+import { CartExclusions, CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
 // sellerId is the authenticated trader's seller (Gateway-injected `Seller-Id`),
@@ -65,4 +65,43 @@ export async function fetchCartFromMySQL(
     console.log("[mysql] first row keys:", Object.keys(rows[0]));
   }
   return (rows as unknown as CartItemRaw[]) ?? [];
+}
+
+// Counts the account's active (status=0) cart lines under this seller that the
+// deal calculator filters out, so the UI can explain an empty/partial cart:
+//   - outOfStock: OnStock items whose seller stock is <=0 / not visible / absent
+//   - preOrder:   non-OnStock lines (the calculator only handles OnStock deals)
+// Distinct by variant+size to mirror the cart query's GROUP BY.
+export async function fetchCartExclusions(
+  phone: string,
+  sellerId: string
+): Promise<CartExclusions> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `
+  SELECT
+    COUNT(DISTINCT CASE
+      WHEN ti.orderType = 'OnStock'
+       AND (vss.quantity IS NULL OR vss.quantity <= 0 OR vss.isVisible <> 1)
+      THEN CONCAT(ti.variantID, '-', ti.sizeID) END) AS outOfStock,
+    COUNT(DISTINCT CASE
+      WHEN ti.orderType <> 'OnStock'
+      THEN CONCAT(ti.variantID, '-', ti.sizeID) END) AS preOrder
+  FROM truck_items ti
+  INNER JOIN user_master um ON um.userid = ti.userid
+  LEFT JOIN variant_size_stock vss
+          ON vss.variantID = ti.variantID
+         AND vss.sizeID    = ti.sizeID
+         AND vss.sellerID  = ti.sellerID
+  WHERE ti.status = 0
+    AND ti.sellerid = ?
+    AND um.companyPhone = ?;
+    `,
+    [sellerId, phone]
+  );
+  const row = rows[0] ?? {};
+  return {
+    outOfStock: Number(row.outOfStock ?? 0),
+    preOrder: Number(row.preOrder ?? 0),
+  };
 }
