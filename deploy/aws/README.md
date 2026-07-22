@@ -32,14 +32,48 @@ bash deploy/aws/03-launch.sh                              # launch + print PRIVA
 # follow 05-wire-gateway.md to set config.dealFlowUrl = http://<PRIVATE_IP>:3000
 ```
 
-## Redeploy a new build
+## Redeploy a change (day-to-day) — `deploy.sh`
+
+Once the instance exists, shipping a code change is a **one-liner** anyone on the
+team can run from their laptop. It needs only **prod AWS creds + Docker + this
+repo** — no `config.env`, no secrets (DB creds + AUTH_KEY already live in SSM),
+no SSH/bastion (it rolls the box via SSM Run Command).
+
 ```
-# bump IMAGE_TAG in config.env (v2, v3…), then:
-bash deploy/aws/02-build-push.sh
-# on the instance (via SSM/bastion): update IMAGE in /opt/deal-flow/run.sh and:
-sudo systemctl restart deal-flow
+git pull                                  # get the change
+export AWS_PROFILE=prod                    # prod creds
+bash deploy/aws/deploy.sh                  # build HEAD (arm64) → push → roll the box → health-check
 ```
-(Or terminate + re-launch: `03-launch.sh` reads the new `IMAGE_TAG`.)
+
+What it does: builds an arm64 image tagged with the **git short SHA**, pushes to
+ECR, pins it in SSM (`/deal-flow/prod/IMAGE`), then via SSM (re)installs a
+self-healing `run.sh` that pulls the SSM-pinned image + re-reads secrets, restarts
+the container, and polls `/g/deal-flow/api/health` until green. Prints the deployed
+image and a ready-to-paste rollback command.
+
+| Flag | Effect |
+|---|---|
+| `--dry-run` | print the plan (instance, image, build?), touch nothing |
+| `--tag <sha>` | **rollback / redeploy an existing ECR tag** (no build) |
+| `--yes` / `-y` | skip the confirm prompt (CI) |
+| `--allow-dirty` | build from an uncommitted tree (tag gets `-dirty-<ts>`) |
+| `--force-build` | rebuild even if the SHA tag is already in ECR |
+
+**Rollback** (instant, no build): re-point at the previous image. `deploy.sh` prints
+the exact command on every deploy, e.g.
+```
+bash deploy/aws/deploy.sh --tag <previous-sha> --yes
+```
+
+Guards: refuses to run outside the prod account, refuses a dirty tree unless
+`--allow-dirty`, and if the health check fails it says so and leaves the previous
+container's rollback command — the old container keeps serving until you act.
+
+> First run migrates the box from the launch-time hardcoded image to the
+> SSM-pinned one; every deploy/reboot after that uses the SSM `IMAGE`. Prereq on
+> your IAM user: `ssm:SendCommand` + `ssm:GetCommandInvocation` (read).
+
+(Full rebuild-from-scratch — new instance — still uses `01`→`02`→`03`.)
 
 ## Cost (incremental, ~$15/mo)
 t4g.small ~$13 · 20 GB gp3 ~$1.6 · ECR storage ~$0.10 · NAT/data $0 (reuses

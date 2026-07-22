@@ -1,0 +1,16 @@
+{
+  "Comment": "deal_flow app - private A record for gateway config.dealFlowUrl",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "deal-flow.bijnis.internal",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          { "Value": "172.31.55.143" }
+        ]
+      }
+    }
+  ]
+}
