@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   CalculatedCartItem,
+  CartExclusions,
   CartResponse,
   DiscountEligibleSku,
   DiscountOverride,
 } from "@/lib/types";
+import { apiPath } from "@/lib/config";
 
 function formatCurrency(value: number): string {
   return `₹${value.toLocaleString("en-IN", {
@@ -22,6 +24,24 @@ function formatPct(value: number): string {
 
 function toKey(item: CalculatedCartItem): string {
   return `${item.variantid}|${item.sizeid}`;
+}
+
+// Human-readable reason a cart is empty/partial: e.g. "2 out of stock · 1 pre-order".
+// Returns null when there's nothing filtered out.
+function excludedReason(excluded?: CartExclusions): string | null {
+  if (!excluded) return null;
+  const parts: string[] = [];
+  if (excluded.outOfStock > 0)
+    parts.push(
+      `${excluded.outOfStock} out of stock`
+    );
+  if (excluded.preOrder > 0)
+    parts.push(`${excluded.preOrder} pre-order`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function excludedCount(excluded?: CartExclusions): number {
+  return (excluded?.outOfStock ?? 0) + (excluded?.preOrder ?? 0);
 }
 
 function computeItemState(
@@ -89,7 +109,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/cart?phone=${phoneNumber}`);
+      const res = await fetch(apiPath(`/api/cart?phone=${phoneNumber}`));
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load cart");
       setData(json);
@@ -140,7 +160,9 @@ export default function Home() {
     setDiscountSkuError(null);
     try {
       const res = await fetch(
-        `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
+        apiPath(
+          `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
+        )
       );
       const json = await res.json();
       if (!res.ok) {
@@ -189,7 +211,7 @@ export default function Home() {
           };
         }),
       };
-      const res = await fetch("/api/cart", {
+      const res = await fetch(apiPath("/api/cart"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -474,11 +496,45 @@ export default function Home() {
         {data && !loading && (
           <>
             {data.items.length === 0 ? (
-              <div className="rounded-3xl border border-white/70 bg-white/85 p-10 text-center text-sm font-semibold text-zinc-500 shadow-sm ring-1 ring-black/5 lg:col-span-2">
-                No cart items found for this phone number.
+              <div className="rounded-3xl border border-white/70 bg-white/85 p-10 text-center shadow-sm ring-1 ring-black/5 lg:col-span-2">
+                {excludedReason(data.excluded) ? (
+                  <>
+                    <p className="text-sm font-black text-zinc-800">
+                      No items available to build a deal.
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-500">
+                      {`This cart has ${excludedCount(data.excluded)} item${
+                        excludedCount(data.excluded) === 1 ? "" : "s"
+                      } that can’t be added: `}
+                      <span className="font-bold text-amber-700">
+                        {excludedReason(data.excluded)}
+                      </span>
+                      {"."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-500">
+                    No cart items found for this phone number.
+                  </p>
+                )}
               </div>
             ) : (
               <>
+                {/* Some items exist but others were filtered out */}
+                {excludedReason(data.excluded) && (
+                  <div className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/70 lg:col-span-2">
+                    {`${excludedCount(data.excluded)} more item${
+                      excludedCount(data.excluded) === 1 ? "" : "s"
+                    } in this cart ${
+                      excludedCount(data.excluded) === 1 ? "isn’t" : "aren’t"
+                    } shown — `}
+                    <span className="font-bold text-amber-900">
+                      {excludedReason(data.excluded)}
+                    </span>
+                    {" (can’t be added to a deal)."}
+                  </div>
+                )}
+
                 {/* Cart Items */}
                 <section className="space-y-3">
                   <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-zinc-500">

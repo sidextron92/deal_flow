@@ -1,14 +1,20 @@
 import { CartItemRaw, DiscountOverride, PriceData } from "@/lib/types";
-import { fetchCartFromMySQL } from "./mysql";
+import { fetchCartExclusions, fetchCartFromMySQL } from "./mysql";
 import { fetchPricesForCart } from "./price-api";
 import { calculateCart } from "./calculator";
 
 export async function getCartWithDeal(
   phone: string,
+  sellerId: string,
   discountOverrides?: DiscountOverride[]
 ) {
-  const cartItems: CartItemRaw[] = await fetchCartFromMySQL(phone);
-  const prices: PriceData[] = await fetchPricesForCart(cartItems);
+  const [cartItems, excluded] = await Promise.all([
+    fetchCartFromMySQL(phone, sellerId),
+    fetchCartExclusions(phone, sellerId),
+  ]);
+  const prices: PriceData[] = await fetchPricesForCart(
+    cartItems as CartItemRaw[]
+  );
 
   const { items, summary } = calculateCart(
     cartItems,
@@ -20,5 +26,6 @@ export async function getCartWithDeal(
     phone,
     items,
     summary,
+    excluded,
   };
 }
