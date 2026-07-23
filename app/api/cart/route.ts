@@ -1,11 +1,33 @@
 import { NextRequest } from "next/server";
-import { fetchCartExclusions, fetchCartFromMySQL } from "@/lib/services/mysql";
+import {
+  fetchCartExclusions,
+  fetchCartFromMySQL,
+  retailerExists,
+} from "@/lib/services/mysql";
 import { fetchPricesForCart } from "@/lib/services/price-api";
 import { calculateCart } from "@/lib/services/calculator";
-import { DiscountOverride } from "@/lib/types";
+import {
+  CalculatedCartItem,
+  CartExclusions,
+  DiscountOverride,
+  EmptyReason,
+} from "@/lib/types";
 import { checkAuthKey, getSellerId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+// When a cart has no deal-able items, say why. Only runs the extra lookup on the
+// empty path, so the normal (populated) cart pays nothing.
+async function computeEmptyReason(
+  items: CalculatedCartItem[],
+  excluded: CartExclusions,
+  phone: string
+): Promise<EmptyReason | null> {
+  if (items.length > 0) return null;
+  // Items exist but were all filtered out — the UI explains this via `excluded`.
+  if (excluded.outOfStock + excluded.preOrder > 0) return null;
+  return (await retailerExists(phone)) ? "no_deal_cart" : "unknown_retailer";
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,8 +51,9 @@ export async function GET(request: NextRequest) {
     ]);
     const prices = await fetchPricesForCart(cartItems);
     const { items, summary } = calculateCart(cartItems, prices);
+    const emptyReason = await computeEmptyReason(items, excluded, phone);
 
-    return Response.json({ phone, items, summary, excluded });
+    return Response.json({ phone, items, summary, excluded, emptyReason });
   } catch (err) {
     console.error("[API /cart GET] Error:", err);
     return Response.json(
@@ -89,8 +112,9 @@ export async function POST(request: NextRequest) {
     const prices = await fetchPricesForCart(cartItems);
 
     const { items, summary } = calculateCart(cartItems, prices, discounts);
+    const emptyReason = await computeEmptyReason(items, excluded, phone);
 
-    return Response.json({ phone, items, summary, excluded });
+    return Response.json({ phone, items, summary, excluded, emptyReason });
   } catch (err) {
     console.error("[API /cart POST] Error:", err);
     return Response.json(
