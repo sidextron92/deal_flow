@@ -44,6 +44,37 @@ function excludedCount(excluded?: CartExclusions): number {
   return (excluded?.outOfStock ?? 0) + (excluded?.preOrder ?? 0);
 }
 
+// Turn an HTTP failure into something a trader can act on — never a raw server
+// string or a bare "Failed". `kind` picks the verb; `status`/`apiError` pick the
+// cause.
+function friendlyError(
+  kind: "cart" | "recalc" | "skus",
+  status: number,
+  apiError?: string
+): string {
+  if (status === 401)
+    return "Your session has expired. Please reopen Deal Flow from the app.";
+  if (status === 400 && apiError === "seller context missing")
+    return "We couldn't identify your seller account. Please reopen Deal Flow from the app.";
+  if (status === 400 && apiError === "phone is required")
+    return "Enter a retailer's phone number to load their cart.";
+  if (status === 400 && apiError === "pincode is required")
+    return "This retailer's cart has no delivery pincode yet, so eligible SKUs can't be loaded.";
+  const what =
+    kind === "recalc"
+      ? "recalculate the deal"
+      : kind === "skus"
+        ? "load discount-eligible SKUs"
+        : "load this cart";
+  if (status >= 500)
+    return `We couldn't ${what} right now. Please try again in a moment.`;
+  return `We couldn't ${what}. Please try again.`;
+}
+
+// fetch() threw — no HTTP response at all (offline, DNS, gateway unreachable).
+const NETWORK_ERROR =
+  "We couldn't reach Deal Flow. Check your connection and try again.";
+
 function computeItemState(
   item: CalculatedCartItem,
   setCount: number,
@@ -110,8 +141,16 @@ export default function Home() {
     setError(null);
     try {
       const res = await fetch(apiPath(`/api/cart?phone=${phoneNumber}`));
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to load cart");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(friendlyError("cart", res.status, json?.error));
+        setData(null);
+        setQuantities({});
+        setDiscounts({});
+        setBaselineDiscounts({});
+        setCartLevelDiscount(0);
+        return;
+      }
       setData(json);
       const qtyMap: Record<string, number> = {};
       const discMap: Record<string, { amount: number; pct: number }> = {};
@@ -126,8 +165,8 @@ export default function Home() {
       setDiscounts(discMap);
       setBaselineDiscounts(baselineDiscMap);
       setCartLevelDiscount(0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+    } catch {
+      setError(NETWORK_ERROR);
       setData(null);
       setQuantities({});
       setDiscounts({});
@@ -164,14 +203,16 @@ export default function Home() {
           `/api/discount-eligible-skus?pincode=${encodeURIComponent(cartPincode)}`
         )
       );
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(json.error || "Failed to load eligible SKUs");
+        setDiscountSkuError(friendlyError("skus", res.status, json?.error));
+        setDiscountSkus([]);
+        return;
       }
       setDiscountSkus(json.items ?? []);
       setDiscountSkuPincode(cartPincode);
-    } catch (err) {
-      setDiscountSkuError(err instanceof Error ? err.message : "Unknown error");
+    } catch {
+      setDiscountSkuError(NETWORK_ERROR);
       setDiscountSkus([]);
     } finally {
       setDiscountSkuLoading(false);
@@ -216,8 +257,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to recalculate");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(friendlyError("recalc", res.status, json?.error));
+        return;
+      }
       setData(json);
       const qtyMap: Record<string, number> = {};
       const discMap: Record<string, { amount: number; pct: number }> = {};
@@ -230,8 +274,8 @@ export default function Home() {
       setDiscounts(discMap);
       setBaselineDiscounts(discMap);
       setCartLevelDiscount(0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+    } catch {
+      setError(NETWORK_ERROR);
     } finally {
       setLoading(false);
     }
@@ -503,18 +547,39 @@ export default function Home() {
                       No items available to build a deal.
                     </p>
                     <p className="mt-2 text-sm font-semibold text-zinc-500">
-                      {`This cart has ${excludedCount(data.excluded)} item${
+                      {`All ${excludedCount(data.excluded)} item${
                         excludedCount(data.excluded) === 1 ? "" : "s"
-                      } that can’t be added: `}
+                      } in this retailer’s cart ${
+                        excludedCount(data.excluded) === 1 ? "is" : "are"
+                      } `}
                       <span className="font-bold text-amber-700">
                         {excludedReason(data.excluded)}
                       </span>
-                      {"."}
+                      {" — none can be added to a deal right now."}
+                    </p>
+                  </>
+                ) : data.emptyReason === "unknown_retailer" ? (
+                  <>
+                    <p className="text-sm font-black text-zinc-800">
+                      {`No retailer found for ${data.phone}.`}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-500">
+                      Double-check the number — it isn’t registered as a
+                      retailer.
+                    </p>
+                  </>
+                ) : data.emptyReason === "no_deal_cart" ? (
+                  <>
+                    <p className="text-sm font-black text-zinc-800">
+                      No deal cart for this retailer under your account.
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-500">
+                      {`${data.phone} is a registered retailer, but hasn’t added any on-stock items with you — they may not be in your deal scope.`}
                     </p>
                   </>
                 ) : (
                   <p className="text-sm font-semibold text-zinc-500">
-                    No cart items found for this phone number.
+                    {`No cart found for ${data.phone}.`}
                   </p>
                 )}
               </div>

@@ -105,3 +105,15 @@ export async function fetchCartExclusions(
     preOrder: Number(row.preOrder ?? 0),
   };
 }
+
+// Whether ANY retailer is registered with this phone (independent of seller).
+// Used only when a cart comes back empty, to tell "no such retailer" apart from
+// "known retailer, but no cart under this trader's seller".
+export async function retailerExists(phone: string): Promise<boolean> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT 1 FROM user_master WHERE companyPhone = ? LIMIT 1`,
+    [phone]
+  );
+  return rows.length > 0;
+}

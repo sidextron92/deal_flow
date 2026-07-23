@@ -1,0 +1,562 @@
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface-2: #f2efe9;
+    --ink: #1b1917;
+    --text: #45413b;
+    --muted: #78716a;
+    --border: #e7e2da;
+    --border-strong: #d8d1c6;
+    --accent: #bf6317;
+    --accent-ink: #9a4e0f;
+    --accent-soft: #fbf1e6;
+    --code-bg: #f4f1ea;
+    --code-ink: #2c2925;
+    --get: #0f8a5f;
+    --post: #2f6fdb;
+    --warn-bg: #fdf3e3;
+    --warn-border: #eccf92;
+    --warn-ink: #8a5a12;
+    --danger: #c0432f;
+    --shadow: 0 1px 2px rgba(30,24,16,.04), 0 6px 22px rgba(30,24,16,.05);
+    --radius: 12px;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15120e; --surface: #1e1a15; --surface-2: #241f19; --ink: #f3efe8;
+      --text: #cec8bd; --muted: #948c80; --border: #2d2820; --border-strong: #3a342b;
+      --accent: #e79447; --accent-ink: #f2a55f; --accent-soft: #2a2016; --code-bg: #211c16;
+      --code-ink: #e4ddd0; --get: #38c890; --post: #6ea3f6; --warn-bg: #2a2113;
+      --warn-border: #5b4a26; --warn-ink: #e0b56a; --danger: #ef6a54;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f3; --surface: #ffffff; --surface-2: #f2efe9; --ink: #1b1917;
+    --text: #45413b; --muted: #78716a; --border: #e7e2da; --border-strong: #d8d1c6;
+    --accent: #bf6317; --accent-ink: #9a4e0f; --accent-soft: #fbf1e6; --code-bg: #f4f1ea;
+    --code-ink: #2c2925; --get: #0f8a5f; --post: #2f6fdb; --warn-bg: #fdf3e3;
+    --warn-border: #eccf92; --warn-ink: #8a5a12; --danger: #c0432f;
+    --shadow: 0 1px 2px rgba(30,24,16,.04), 0 6px 22px rgba(30,24,16,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #15120e; --surface: #1e1a15; --surface-2: #241f19; --ink: #f3efe8;
+    --text: #cec8bd; --muted: #948c80; --border: #2d2820; --border-strong: #3a342b;
+    --accent: #e79447; --accent-ink: #f2a55f; --accent-soft: #2a2016; --code-bg: #211c16;
+    --code-ink: #e4ddd0; --get: #38c890; --post: #6ea3f6; --warn-bg: #2a2113;
+    --warn-border: #5b4a26; --warn-ink: #e0b56a; --danger: #ef6a54;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.35);
+  }
+
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.masthead { border-bottom: 1px solid var(--border); background: var(--surface); margin-bottom: 40px; }
+  .masthead .inner { max-width: 880px; margin: 0 auto; padding: 40px 24px 34px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  h1 { font-size: clamp(28px, 4.5vw, 40px); line-height: 1.1; margin: 0 0 12px; color: var(--ink); font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
+  .lede { font-size: 17px; color: var(--muted); margin: 0; max-width: 62ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 6px 11px; border-radius: 999px; }
+  .chip b { color: var(--ink); font-weight: 650; }
+  .chip code { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); }
+
+  nav.toc { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; margin-bottom: 44px; box-shadow: var(--shadow); }
+  nav.toc p { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  nav.toc ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px 24px; counter-reset: toc; }
+  nav.toc li { counter-increment: toc; }
+  nav.toc a { display: flex; gap: 10px; align-items: baseline; text-decoration: none; color: var(--text); padding: 5px 0; border-radius: 6px; }
+  nav.toc a::before { content: counter(toc, decimal-leading-zero); font-family: var(--mono); font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  nav.toc a:hover { color: var(--accent-ink); }
+
+  section { margin-bottom: 52px; scroll-margin-top: 24px; }
+  h2 { font-size: 22px; color: var(--ink); font-weight: 750; letter-spacing: -.01em; margin: 0 0 6px; display: flex; align-items: baseline; gap: 12px; text-wrap: balance; }
+  h2 .num { font-family: var(--mono); font-size: 14px; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  h2 + .sub { color: var(--muted); margin: 0 0 20px; font-size: 15px; }
+  h3 { font-size: 15px; color: var(--ink); font-weight: 700; margin: 26px 0 8px; letter-spacing: -.005em; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  strong { color: var(--ink); font-weight: 650; }
+  code:not(pre code) { font-family: var(--mono); font-size: .875em; background: var(--code-bg); color: var(--code-ink); padding: .12em .4em; border-radius: 5px; border: 1px solid var(--border); }
+  ul { margin: 0 0 16px; padding-left: 20px; }
+  li { margin: 5px 0; }
+
+  .code { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; margin: 0 0 18px; overflow: hidden; }
+  .code pre { margin: 0; padding: 16px 18px; overflow-x: auto; }
+  .code code { font-family: var(--mono); font-size: 13px; line-height: 1.6; color: var(--code-ink); white-space: pre; }
+  .code .copy { position: absolute; top: 8px; right: 8px; font: 600 11px/1 var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 9px; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; }
+  .code:hover .copy, .code:focus-within .copy { opacity: 1; }
+  .code .copy:hover { color: var(--accent-ink); border-color: var(--accent); }
+  .code .copy:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin: 0 0 18px; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+  thead th { text-align: left; background: var(--surface-2); color: var(--ink); font-weight: 650; padding: 10px 14px; border-bottom: 1px solid var(--border-strong); font-size: 12.5px; letter-spacing: .02em; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody td:first-child { color: var(--ink); }
+  td code, th code { background: var(--code-bg); border: 1px solid var(--border); padding: .1em .38em; border-radius: 5px; font-family: var(--mono); font-size: 12.5px; }
+
+  .pill { display: inline-block; font: 700 11px/1 var(--mono); letter-spacing: .06em; padding: 4px 7px; border-radius: 5px; vertical-align: middle; }
+  .pill.get { color: var(--get); background: color-mix(in srgb, var(--get) 12%, transparent); border: 1px solid color-mix(in srgb, var(--get) 34%, transparent); }
+  .pill.post { color: var(--post); background: color-mix(in srgb, var(--post) 12%, transparent); border: 1px solid color-mix(in srgb, var(--post) 34%, transparent); }
+
+  .endpoint { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 16px 18px; margin: 0 0 14px; box-shadow: var(--shadow); }
+  .endpoint .route { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .endpoint .route .path { font-family: var(--mono); font-size: 14px; color: var(--ink); font-weight: 600; }
+  .endpoint p { margin: 6px 0 0; font-size: 14.5px; }
+  .endpoint ul { margin: 8px 0 0; font-size: 14px; }
+
+  .callout { border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; background: var(--surface); font-size: 14.5px; }
+  .callout .tag { font: 700 11px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.critical { border-left-color: var(--accent); background: var(--accent-soft); }
+  .callout.critical .tag { color: var(--accent-ink); }
+  .callout.warn { border-left-color: var(--warn-border); background: var(--warn-bg); }
+  .callout.warn .tag { color: var(--warn-ink); }
+  .callout.warn p, .callout.warn strong { color: var(--warn-ink); }
+
+  /* ---- phone mockup ---- */
+  .mock { display: flex; gap: 20px 34px; flex-wrap: wrap; align-items: center; justify-content: center;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px;
+    padding: 34px 24px; margin: 0 0 14px; }
+  .device { width: 236px; flex: 0 0 auto; }
+  .phone { background: #0e0d0c; border-radius: 30px; padding: 10px; box-shadow: 0 18px 40px rgba(20,16,10,.28), 0 3px 8px rgba(20,16,10,.2); }
+  .screen { background: #f7f5f1; border-radius: 22px; overflow: hidden; height: 400px; display: flex; flex-direction: column; position: relative; }
+  .statusbar { height: 26px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font: 600 11px/1 var(--sans); color: #2b2824; }
+  .statusbar .dots { display: flex; gap: 3px; }
+  .statusbar .dots i { width: 4px; height: 4px; border-radius: 50%; background: #2b2824; display: block; }
+  .appbar { padding: 8px 16px 12px; font: 700 15px/1.2 var(--sans); color: #201d19; border-bottom: 1px solid #e8e3db; display: flex; align-items: center; gap: 8px; }
+  .appbar .back { color: #8a8178; font-weight: 700; }
+  .screen-body { padding: 16px; flex: 1; overflow: hidden; }
+  .devlabel { text-align: center; margin-top: 14px; font: 600 12.5px/1.4 var(--sans); color: var(--ink); }
+  .devlabel span { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+
+  /* app tools list */
+  .tool { display: flex; align-items: center; gap: 11px; padding: 12px; border-radius: 12px; background: #fff; border: 1px solid #ece7df; margin-bottom: 10px; }
+  .tool .ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: 0 0 auto; }
+  .tool .tt { font: 600 13px/1.25 var(--sans); color: #23201c; }
+  .tool .ts { font: 400 11px/1.3 var(--sans); color: #857c72; margin-top: 1px; }
+  .tool.muted { opacity: .5; }
+  .df-card { background: linear-gradient(180deg,#fff, #fdf6ee); border: 1px solid #eed9bf; box-shadow: 0 6px 16px rgba(191,99,23,.08); }
+  .df-card .ic { background: #fbead6; }
+  .df-btn { margin-top: 12px; width: 100%; background: #bf6317; color: #fff; border: 0; border-radius: 10px;
+    padding: 11px; font: 700 13px/1 var(--sans); display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(191,99,23,.3); }
+  .flag-tag { display: inline-flex; align-items: center; gap: 6px; font: 700 10px/1 var(--sans); letter-spacing: .06em;
+    text-transform: uppercase; color: #0f8a5f; background: #e6f5ee; border: 1px solid #b7e2cd; padding: 4px 8px; border-radius: 999px; margin-bottom: 12px; }
+  .flag-tag.off { color: #a2560f; background: #fbeede; border-color: #eccf92; }
+
+  /* webview screen (product) */
+  .wv-url { background: #efeae2; margin: 10px 12px 0; border-radius: 8px; padding: 6px 10px; font: 500 10px/1 var(--mono); color: #6a6259; display: flex; align-items: center; gap: 6px; }
+  .wv-brand { font: 700 9px/1 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: #bf6317; margin: 14px 0 3px; }
+  .wv-title { font: 800 17px/1.1 var(--sans); color: #1c1a17; margin-bottom: 12px; }
+  .wv-field { background: #fff; border: 1px solid #e4ddd2; border-radius: 10px; padding: 10px 12px; font: 500 12px/1 var(--sans); color: #23201c; margin-bottom: 12px; }
+  .wv-field .lab { font-size: 9px; color: #8a8178; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; display:block; }
+  .wv-sum { background: #fff; border: 1px solid #e4ddd2; border-radius: 10px; overflow: hidden; }
+  .wv-sum .r { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f0ebe3; font: 500 11px/1.2 var(--sans); color: #4a453e; }
+  .wv-sum .r:last-child { border-bottom: 0; background: #fbf6ef; }
+  .wv-sum .r b { color: #1c1a17; font-weight: 700; }
+  .wv-sum .r .g { color: #0f8a5f; font-weight: 700; }
+
+  .arrow { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
+  .arrow .tap { font: 700 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+  .arrow svg { width: 46px; height: 22px; }
+  @media (max-width: 560px) { .arrow svg { transform: rotate(90deg); } }
+
+  footer { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 22px; color: var(--muted); font-size: 13px; }
+  footer code { font-family: var(--mono); font-size: 12px; }
+
+  @media (max-width: 640px) { nav.toc ol { grid-template-columns: 1fr; } .masthead .inner { padding: 30px 20px 26px; } .wrap { padding: 0 18px 72px; } }
+</style>
+
+<header class="masthead">
+  <div class="inner">
+    <p class="eyebrow">Integration Contract</p>
+    <h1>Deal Flow — Trader App Integration</h1>
+    <p class="lede">Embed the Best Deal Calculator in the FOS/RM app as a WebView, behind a backend-controlled feature flag. Everything the app team needs to ship it.</p>
+    <div class="meta-row">
+      <span class="chip"><b>Base</b> <code>https://api.bijnis.com/g/deal-flow</code></span>
+      <span class="chip"><b>App</b> <code>com.bizcrum.rm.app</code></span>
+      <span class="chip"><b>Model</b> WebView + header injection</span>
+      <span class="chip"><b>Flag</b> <code>dealFlow.enabled</code> (backend)</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#model">Integration model</a></li>
+      <li><a href="#flag">Feature flag (backend)</a></li>
+      <li><a href="#entry">Entry point &amp; UX</a></li>
+      <li><a href="#auth">Auth &amp; header injection</a></li>
+      <li><a href="#api">API reference</a></li>
+      <li><a href="#schemas">Response schemas</a></li>
+      <li><a href="#rollout">Rollout &amp; rollback</a></li>
+      <li><a href="#security">Security notes</a></li>
+    </ol>
+  </nav>
+
+  <section id="model">
+    <h2><span class="num">01</span> Integration model</h2>
+    <p class="sub">It's a WebView — not native screens or direct API calls.</p>
+    <p>Deal Flow is a self-contained web app served through the gateway at a single base path. <strong>You embed the URL in a WebView; the page makes its own API calls.</strong> You do not build native screens or call the <code>/api/*</code> endpoints directly — they're documented in §5 for reference and debugging only.</p>
+    <div class="callout critical">
+      <span class="tag">The one thing to get right</span>
+      <p>Open <code>https://api.bijnis.com/g/deal-flow</code> in the WebView. The <strong>initial page load is public</strong> (no auth). The page then calls <code>/api/*</code>, which <strong>require the FOS headers in §4</strong> — and the page attaches none itself, so the app must inject them.</p>
+    </div>
+  </section>
+
+  <section id="flag">
+    <h2><span class="num">02</span> Feature flag (backend-controlled)</h2>
+    <p class="sub">The server decides who gets it — no app release to change the audience.</p>
+    <p>There are two independent controls; keep them separate:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Control</th><th>Scope</th><th>Owned by</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td><code>DEAL_FLOW_URL</code> (gateway config)</td><td>Whole feature, everyone</td><td>Ops / platform</td><td>Global master switch / kill-switch. Unset → <code>/g/deal-flow</code> 404 for all.</td></tr>
+          <tr><td><code>dealFlow.enabled</code> (backend flag)</td><td>Per user / cohort</td><td>Backend, read by app</td><td><strong>The rollout knob.</strong> Decides who sees the entry, changeable live.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>For rolling out "to any users", use the <strong>backend flag</strong>: the app reads a per-user value on login and shows the Deal Flow entry only when it's on. Because the <strong>server owns the value</strong>, you can flip the audience anytime without an app build.</p>
+    <div class="code">
+      <button class="copy" type="button">Copy</button>
+      <pre><code>// returned per authenticated trader by the app's config endpoint
+{
+  "dealFlow": {
+    "enabled": true,                                  // server decides per user
+    "url": "https://api.bijnis.com/g/deal-flow"       // lets you re-point without an app build
+  }
+}</code></pre>
+    </div>
+    <p>The server computes <code>enabled</code> from a targeting rule you control centrally — any of:</p>
+    <ul>
+      <li><strong>All</strong> traders (full launch),</li>
+      <li><strong>Percentage</strong> rollout (hash of <code>fosId</code> → bucket, e.g. 10% → 50% → 100%),</li>
+      <li><strong>Cohort / allowlist</strong> — specific <code>fosId</code>s, <code>sellerId</code>s, regions, or reporting hierarchy.</li>
+    </ul>
+    <div class="callout warn">
+      <span class="tag">Frontend dev's call — mechanism</span>
+      <p>Where the flag lives (remote config, the app's existing per-user config/bootstrap API, or a feature-flag service) is up to the app team. The contract only needs: a <strong>boolean the app reads per user</strong>, and the entry rendered when it's <code>true</code>. The <code>url</code> field is optional but recommended.</p>
+    </div>
+    <p style="font-size:14px;color:var(--muted)">Optional hardening: the flag above controls <em>visibility</em>. If you want it <em>enforced</em> (a non-enabled user who reaches the URL gets no data), the platform team can add a server-side allowlist check in the gateway keyed by <code>sellerId</code>/<code>fosId</code> — recommended once you go past a trusted pilot.</p>
+  </section>
+
+  <section id="entry">
+    <h2><span class="num">03</span> Entry point &amp; UX</h2>
+    <p class="sub">Flag on → a "Take me to Deal Flow" button that opens the embedded UI.</p>
+    <p>Render the entry <strong>only when <code>dealFlow.enabled</code> is true</strong>. Tapping <strong>Take me to Deal Flow</strong> opens the embedded WebView at <code>dealFlow.url</code>, with the §4 auth headers injected. When the flag is off, render nothing — no card, no button.</p>
+
+    <div class="mock" role="img" aria-label="Left: the FOS app tools screen showing a Deal Flow card with a 'Take me to Deal Flow' button when the flag is enabled. Right: tapping it opens the embedded Best Deal Calculator web UI.">
+      <!-- App screen with the entry -->
+      <div class="device">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+          <div class="appbar">RM Tools</div>
+          <div class="screen-body">
+            <span class="flag-tag">● dealFlow.enabled = true</span>
+            <div class="tool df-card">
+              <div class="ic">🧮</div>
+              <div>
+                <div class="tt">Best Deal Calculator</div>
+                <div class="ts">Build the best deal for your retailer</div>
+              </div>
+            </div>
+            <button class="df-btn">Take me to Deal Flow →</button>
+            <div class="tool muted" style="margin-top:14px"><div class="ic" style="background:#eef0f2">📦</div><div><div class="tt">Orders</div><div class="ts">Track &amp; manage</div></div></div>
+            <div class="tool muted"><div class="ic" style="background:#eef0f2">👥</div><div><div class="tt">Retailers</div><div class="ts">Your accounts</div></div></div>
+          </div>
+        </div></div>
+        <div class="devlabel">FOS / RM app<span>flag on → entry shown</span></div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="arrow">
+        <span class="tap">tap</span>
+        <svg viewBox="0 0 46 22" fill="none" aria-hidden="true"><path d="M2 11h40M34 4l8 7-8 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span style="font-size:11px">opens WebView</span>
+      </div>
+
+      <!-- WebView screen -->
+      <div class="device">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+          <div class="appbar"><span class="back">‹</span> Deal Flow</div>
+          <div class="wv-url">🔒 api.bijnis.com/g/deal-flow</div>
+          <div class="screen-body" style="padding-top:10px">
+            <div class="wv-brand">Deal Flow</div>
+            <div class="wv-title">Best Deal Calculator</div>
+            <div class="wv-field"><span class="lab">Customer Phone Number</span>72829 18860</div>
+            <div class="wv-sum">
+              <div class="r"><span>Cart items</span><b>21</b></div>
+              <div class="r"><span>Original margin</span><b>23.4%</b></div>
+              <div class="r"><span>Cart value</span><b>₹33,386</b></div>
+              <div class="r"><span>Final deal price</span><span class="g">₹33,386</span></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="devlabel">Embedded WebView<span>the deal_flow web UI</span></div>
+      </div>
+    </div>
+
+    <h3>Entry component (pseudocode)</h3>
+    <div class="code">
+      <button class="copy" type="button">Copy</button>
+      <pre><code>// On the RM tools/home screen
+function DealFlowEntry() {
+  const { dealFlow } = useAppConfig();          // per-user config from backend
+  if (!dealFlow?.enabled) return null;          // flag OFF → render nothing
+
+  return (
+    &lt;DealCard onPress={() => openDealFlow(dealFlow.url)}&gt;
+      Take me to Deal Flow →
+    &lt;/DealCard&gt;
+  );
+}
+
+// Opens the embedded web UI with FOS auth headers injected (see §4)
+function openDealFlow(url) {
+  navigation.navigate('DealFlowWebView', { uri: url });
+}</code></pre>
+    </div>
+
+    <h3>Inside the WebView</h3>
+    <p>The trader enters a <strong>retailer phone number</strong> (the retailer's registered <code>companyPhone</code>). The page loads that retailer's on-stock cart <strong>for this trader's seller</strong>, shows per-item pricing / margin / discount and a live deal summary, plus a "Discount Eligible SKUs" sheet. Everything is seller-scoped by the token — a trader only ever sees their own seller's carts.</p>
+  </section>
+
+  <section id="auth">
+    <h2><span class="num">04</span> Auth &amp; header injection</h2>
+    <p class="sub">Inject the FOS headers into every <code>/g/deal-flow/*</code> request.</p>
+    <p>The deal_flow page's own <code>fetch()</code> calls carry no auth. In the app you must inject the FOS auth + context headers into <strong>all</strong> WebView requests to <code>/g/deal-flow/*</code>. <code>react-native-webview</code>'s <code>source.headers</code> only applies to the <strong>top-level navigation</strong>, not sub-requests — so patch <code>fetch</code> / <code>XMLHttpRequest</code> via <code>injectedJavaScriptBeforeContentLoaded</code>.</p>
+    <p>This is the <strong>same header set the app already sends to other gateway APIs</strong> (e.g. <code>/g/psfa/*</code>):</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Header</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>token</code></td><td>FOS JWT</td><td>primary auth token</td></tr>
+          <tr><td><code>Authorization</code></td><td>FOS JWT</td><td>same token (gateway reads either)</td></tr>
+          <tr><td><code>sessiontoken</code></td><td>FOS JWT</td><td>same token</td></tr>
+          <tr><td><code>User-Type</code></td><td><code>fos</code></td><td><strong>required</strong> — userservice fos-restriction</td></tr>
+          <tr><td><code>Platform</code></td><td><code>react-android</code> / <code>react-ios</code></td><td>required</td></tr>
+          <tr><td><code>App-Version</code></td><td>e.g. <code>3.1.7</code></td><td>required</td></tr>
+          <tr><td><code>Build-Version</code></td><td>e.g. <code>202</code></td><td>required</td></tr>
+          <tr><td><code>Package-Name</code></td><td><code>com.bizcrum.rm.app</code></td><td>required</td></tr>
+          <tr><td><code>Device-Id</code></td><td>device id</td><td>required</td></tr>
+          <tr><td><code>Android-Sdk-Version</code></td><td>e.g. <code>31</code></td><td>required</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="tag">Do not send these</span>
+      <p><code>Seller-Id</code>, <code>Fos-Id</code>, <code>Auth-Key</code> — the <strong>gateway derives and injects them</strong> from the validated token and strips any client-supplied copies (anti-spoofing). The trader's <code>sellerId</code> comes from the token; the app does nothing for it.</p>
+    </div>
+
+    <h3>RN WebView injection</h3>
+    <div class="code">
+      <button class="copy" type="button">Copy</button>
+      <pre><code>const AUTH_HEADERS = {
+  token: FOS_JWT,
+  Authorization: FOS_JWT,
+  sessiontoken: FOS_JWT,
+  'User-Type': 'fos',
+  Platform: 'react-android',
+  'App-Version': appVersion,
+  'Build-Version': buildVersion,
+  'Package-Name': 'com.bizcrum.rm.app',
+  'Device-Id': deviceId,
+  'Android-Sdk-Version': sdkVersion,
+};
+
+const injected = `
+(function () {
+  var H = ${JSON.stringify(AUTH_HEADERS)};
+  var of = window.fetch;
+  window.fetch = function (input, init) {
+    init = init || {};
+    var url = typeof input === 'string' ? input : (input &amp;&amp; input.url) || '';
+    if (url.indexOf('/g/deal-flow/api/') !== -1) {
+      init.headers = Object.assign({}, init.headers || {}, H);
+    }
+    return of(input, init);
+  };
+  var oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (m, u) {
+    this.__df = (u || '').indexOf('/g/deal-flow/api/') !== -1;
+    return oo.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function () {
+    if (this.__df) { for (var k in H) this.setRequestHeader(k, H[k]); }
+    return os.apply(this, arguments);
+  };
+  true;
+})();
+`;
+
+&lt;WebView
+  source={{ uri: dealFlow.url }}
+  injectedJavaScriptBeforeContentLoaded={injected}
+  sharedCookiesEnabled={false}
+/&gt;</code></pre>
+    </div>
+    <div class="callout warn">
+      <span class="tag">Token refresh</span>
+      <p>If the JWT can expire mid-session, re-inject the current token (the app already manages FOS token lifetime for other webviews). A stale token surfaces as <code>401</code> on the <code>/api/*</code> calls — the UI then shows "Failed to load cart".</p>
+    </div>
+  </section>
+
+  <section id="api">
+    <h2><span class="num">05</span> API reference</h2>
+    <p class="sub">What the WebView calls — for reference &amp; debugging.</p>
+    <p>Base <code>https://api.bijnis.com/g/deal-flow</code>. All <code>/api/*</code> except <code>/api/health</code> require the §4 headers. Auth failures return <code>401 {"status":401,"message":"Unauthorized"}</code>.</p>
+
+    <div class="endpoint">
+      <div class="route"><span class="pill get">GET</span> <span class="path">/api/health</span></div>
+      <p>Public liveness. <code>200</code> when up. No auth.</p>
+    </div>
+    <div class="endpoint">
+      <div class="route"><span class="pill get">GET</span> <span class="path">/api/cart?phone=&lt;companyPhone&gt;</span></div>
+      <p>The retailer's deal cart, scoped to the trader's seller (from token).</p>
+      <ul>
+        <li><code>phone</code> <em>(required)</em> — retailer's <code>companyPhone</code>.</li>
+        <li><strong>200</strong> → <code>CartResponse</code> (§6). <code>items: []</code> with <code>200</code> means the retailer has no on-stock cart under this seller — <em>not</em> an error.</li>
+        <li><strong>400</strong> <code>phone is required</code> / <code>seller context missing</code> (the latter only if the gateway didn't inject <code>Seller-Id</code> — shouldn't happen in the app).</li>
+        <li><strong>500</strong> <code>Failed to fetch cart</code>.</li>
+      </ul>
+    </div>
+    <div class="endpoint">
+      <div class="route"><span class="pill post">POST</span> <span class="path">/api/cart</span></div>
+      <p>Recalculate the deal after the trader edits quantities / applies discounts.</p>
+      <div class="code" style="margin-top:10px">
+        <button class="copy" type="button">Copy</button>
+        <pre><code>{
+  "phone": "9876543210",
+  "quantities": [ { "variantid": 123, "sizeid": 45, "setCount": 2 } ],
+  "discounts":  [ { "variantid": 123, "sizeid": 45, "amount": 10 } ]
+}</code></pre>
+      </div>
+      <ul>
+        <li><code>quantities</code>, <code>discounts</code> optional. In a discount, use <code>amount</code> <em>or</em> <code>pct</code>.</li>
+        <li><strong>200</strong> → <code>CartResponse</code> (recomputed).</li>
+      </ul>
+    </div>
+    <div class="endpoint">
+      <div class="route"><span class="pill get">GET</span> <span class="path">/api/discount-eligible-skus?pincode=&lt;pincode&gt;</span></div>
+      <p>SKUs eligible for discount for a pincode (the UI passes the cart's pincode).</p>
+      <ul>
+        <li><code>pincode</code> <em>(required)</em>.</li>
+        <li><strong>200</strong> → <code>{ "pincode": string, "items": DiscountEligibleSku[] }</code>.</li>
+        <li><strong>400</strong> <code>pincode is required</code>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="schemas">
+    <h2><span class="num">06</span> Response schemas</h2>
+    <p class="sub">TypeScript shapes returned by the endpoints.</p>
+    <div class="code">
+      <button class="copy" type="button">Copy</button>
+      <pre><code>interface CartResponse {
+  phone: string;
+  items: CalculatedCartItem[];
+  summary: DealSummary;
+  excluded: { outOfStock: number; preOrder: number }; // lines filtered out of the deal
+}
+
+interface CalculatedCartItem {
+  // identity / display
+  userid: string; sellerid: string; fmWarehouseid: string;
+  productId: number; variantid: number; sizeid: number;
+  ProductName: string; colorname: string; sizetext: string; imageurl: string;
+  pincode: string; lotSize: number; CurrentInventory: number;
+  // quantities / prices
+  setCount: number; pieces: number;
+  MRP: number; purchasePriceWithoutTax: number;
+  landingPriceBeforeTax: number; landingPrice: number;
+  totalValue: number; dealValue: number;
+  // margins / discounts
+  profitAmount: number; profitMarginPct: number;
+  maxDiscountPct: number; maxDiscountAmount: number;
+  discountAmount: number; discountPct: number;
+  effectivePriceWithTax: number;
+  profitAfterDiscount: number; marginAfterDiscountPct: number;
+  eligibleDiscount: number; retailerMargin: number;
+}
+
+interface DealSummary {
+  totalCartValue: number;
+  totalProfit: number;
+  overallMarginPct: number;
+  maxCartDiscountPct: number;
+  maxCartDiscountAmount: number;
+  finalDealPrice: number;
+  profitAfterDiscount: number;
+  marginAfterDiscountPct: number;
+}
+
+interface DiscountEligibleSku {
+  warehouseid: number; productId: number; variantid: number; sizeid: number;
+  MRP: number; purchasePriceWithoutTax: number; retailerMargin: number;
+  ProductName: string; colorname: string; sizetext: string; imageurl: string;
+  CurrentInventory: number; eligibleDiscount: number;
+  categoryGroupName: string; mainCategoryName: string;
+  performanceData: string | null;
+  landingPriceBeforeTax: number; landingPrice: number;
+  retailMarginPct: number | null;
+}</code></pre>
+    </div>
+  </section>
+
+  <section id="rollout">
+    <h2><span class="num">07</span> Rollout &amp; rollback</h2>
+    <p class="sub">The backend flag is the day-to-day control.</p>
+    <ul>
+      <li><strong>Rollout</strong> — ship the flagged entry once; then widen <code>dealFlow.enabled</code> server-side (pilot cohort → percentage → all). No further app releases.</li>
+      <li><strong>App-side rollback</strong> — set <code>dealFlow.enabled = false</code> for the affected users. Instant, no build.</li>
+      <li><strong>Backend rollback (ops)</strong> — unset <code>DEAL_FLOW_URL</code> on the gateway → <code>/g/deal-flow</code> returns 404 fleet-wide. The global kill-switch, independent of the per-user flag.</li>
+    </ul>
+  </section>
+
+  <section id="security">
+    <h2><span class="num">08</span> Security notes</h2>
+    <p class="sub">Pricing and margins are exposed only behind FOS auth.</p>
+    <ul>
+      <li>Every <code>/api/*</code> except health is validated against userservice with a <code>fos</code> restriction, and the seller is bound to the token. Do not add any path that bypasses this.</li>
+      <li>Never inject <code>Seller-Id</code> / <code>Fos-Id</code> / <code>Auth-Key</code> from the client — the gateway owns them.</li>
+      <li>Pricing, margin and discount data must never render outside an authenticated FOS session.</li>
+      <li>The per-user flag controls <em>visibility</em>; for hard access control, pair it with a server-side allowlist in the gateway (see §2).</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Deal Flow · trader app integration contract · source of truth: <code>deal_flow/docs/TRADER_APP_INTEGRATION.md</code>. Questions on the gateway/auth leg → platform team.</p>
+  </footer>
+</div>
+
+<script>
+  document.querySelectorAll('.code .copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var code = btn.parentElement.querySelector('code');
+      var text = code.innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        var prev = btn.textContent; btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = prev; }, 1400);
+      }).catch(function () {
+        var prev = btn.textContent; btn.textContent = 'Press ⌘C';
+        setTimeout(function () { btn.textContent = prev; }, 1400);
+      });
+    });
+  });
+</script>

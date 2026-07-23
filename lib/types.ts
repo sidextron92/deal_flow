@@ -68,11 +68,21 @@ export interface CartExclusions {
   preOrder: number;
 }
 
+// Why a cart came back with zero deal-able items — lets the UI say exactly what
+// happened instead of a blank "no items":
+//   - "unknown_retailer": no retailer is registered with this phone number.
+//   - "no_deal_cart":     the retailer exists but has no active cart under this
+//                         trader's seller (not in their deal scope / nothing added).
+//   - null:               items were found, or they exist but are all excluded
+//                         (out of stock / pre-order) — described by `excluded`.
+export type EmptyReason = "unknown_retailer" | "no_deal_cart";
+
 export interface CartResponse {
   phone: string;
   items: CalculatedCartItem[];
   summary: DealSummary;
   excluded: CartExclusions;
+  emptyReason: EmptyReason | null;
 }
 
 export interface DiscountEligibleSkuRaw {
