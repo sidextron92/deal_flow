@@ -2,8 +2,45 @@ import { RowDataPacket } from "mysql2";
 import { CartExclusions, CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
-// sellerId is the authenticated trader's seller (Gateway-injected `Seller-Id`),
-// NOT a hardcoded constant — a fixed seller returns an empty cart for traders
+// Resolve the trader's seller from their fosId via the canonical org mapping:
+//   fosId -> fos_users.dsId -> the dark store's seller in seller_master.
+// The DS is matched by the EXACT dark-store definition:
+//   fmWarehouseId = dsId AND sellerType = 'BRAND_AGGREGATORS'
+//   AND factoryType = 'darkstore' AND isProductActive = 1
+// (a warehouse also holds PRODUCTION_FACTORIES etc., and the factoryType +
+// isProductActive filters skip both non-darkstore aggregators and DEACTIVATED
+// dark stores, and disambiguate the rare warehouse with >1 aggregator). userID
+// of that row is the sellerId. A surviving >1 match is still flagged as misconfig.
+// Returns the sellerId as a string, or null if the fosId / active DS isn't found.
+export async function resolveSellerIdFromFos(
+  fosId: string
+): Promise<string | null> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `
+  SELECT sm.userID AS sellerId
+  FROM fos_users fu
+  INNER JOIN seller_master sm
+          ON sm.fmWarehouseId = fu.dsId
+         AND sm.sellerType = 'BRAND_AGGREGATORS'
+         AND sm.factoryType = 'darkstore'
+         AND sm.isProductActive = 1
+  WHERE fu.fosId = ?
+  LIMIT 5;
+    `,
+    [fosId]
+  );
+  if (rows.length === 0) return null;
+  if (rows.length > 1) {
+    console.warn(
+      `[seller-resolve] fosId ${fosId} maps to ${rows.length} BRAND_AGGREGATORS sellers (DS misconfig?); using ${rows[0].sellerId}`
+    );
+  }
+  return rows[0].sellerId != null ? String(rows[0].sellerId) : null;
+}
+
+// The `sellerId` below is resolved from the trader's fosId (resolveSellerIdFromFos)
+// — NOT a hardcoded constant; a fixed seller returns an empty cart for traders
 // whose stock lives under a different seller.
 export async function fetchCartFromMySQL(
   phone: string,

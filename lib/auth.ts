@@ -18,10 +18,12 @@ export function checkAuthKey(request: NextRequest): Response | null {
 }
 
 /**
- * Seller id for the authenticated trader. The Gateway derives it from the
- * trader's validated token and injects it as the `Seller-Id` header. Falls back
- * to the SELLER_ID env var for local dev / direct testing.
+ * The trader's fosId. The Gateway derives it from the validated token and injects
+ * it as the `Fos-Id` header (un-spoofable — it's a gateway-controlled header). The
+ * seller is then resolved from it in the DB (fosId -> DS -> BRAND_AGGREGATORS
+ * seller) rather than trusting a token field, whose `appInfo.sellerId` can arrive
+ * truncated. Falls back to the FOS_ID env var for local dev / direct testing.
  */
-export function getSellerId(request: NextRequest): string | undefined {
-  return request.headers.get("seller-id") ?? process.env.SELLER_ID ?? undefined;
+export function getFosId(request: NextRequest): string | undefined {
+  return request.headers.get("fos-id") ?? process.env.FOS_ID ?? undefined;
 }
