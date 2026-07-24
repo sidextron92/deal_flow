@@ -151,3 +151,18 @@ only to distinguish "unknown number" from "no cart under this DS".
   endpoint.
 - The gateway injects `Seller-Id` too, but deal_flow **ignores it** now (derives
   from `Fos-Id`). `Seller-Id` is dead weight pending a gateway cleanup.
+
+---
+
+## 7. Open product decisions (revisit later)
+
+- **Retailer visibility scope — DS-level (current), by design for now.** A FOS can
+  look up **any** retailer's cart under their dark store (the cart is matched only
+  by `sellerID` = the DS + `companyPhone` = the entered number). It does **not**
+  restrict to the FOS's *own* assigned retailers in `fos_buyer_user_mappings_ds`.
+  Product confirmed DS-level visibility is acceptable for now (2026-07-24);
+  flagged to revisit if per-FOS retailer scoping is ever needed. If you tighten
+  it, the hook is: additionally require the retailer's `userid` to appear in
+  `fos_buyer_user_mappings_ds` for the caller's `fosId`.
+- **Null-`dsId` FOS → `400 "no seller found for this trader"` is intended**
+  (~93% of `fos_users` have no `dsId`; they aren't Deal-Flow/darkstore FOS).
