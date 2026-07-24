@@ -54,8 +54,10 @@ function friendlyError(
 ): string {
   if (status === 401)
     return "Your session has expired. Please reopen Deal Flow from the app.";
-  if (status === 400 && apiError === "seller context missing")
-    return "We couldn't identify your seller account. Please reopen Deal Flow from the app.";
+  if (status === 400 && apiError === "trader context missing")
+    return "We couldn't identify your trader account. Please reopen Deal Flow from the app.";
+  if (status === 400 && apiError === "no seller found for this trader")
+    return "We couldn't find a seller linked to your account. Please contact support.";
   if (status === 400 && apiError === "phone is required")
     return "Enter a retailer's phone number to load their cart.";
   if (status === 400 && apiError === "pincode is required")

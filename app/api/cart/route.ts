@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import {
   fetchCartExclusions,
   fetchCartFromMySQL,
+  resolveSellerIdFromFos,
   retailerExists,
 } from "@/lib/services/mysql";
 import { fetchPricesForCart } from "@/lib/services/price-api";
@@ -12,7 +13,24 @@ import {
   DiscountOverride,
   EmptyReason,
 } from "@/lib/types";
-import { checkAuthKey, getSellerId } from "@/lib/auth";
+import { checkAuthKey, getFosId } from "@/lib/auth";
+
+// Resolve the trader's seller: a local-dev SELLER_ID override wins, otherwise
+// derive it from the (gateway-injected, un-spoofable) fosId via the DS mapping.
+// Returns { sellerId } on success, or { error } describing why it couldn't.
+async function resolveSeller(
+  request: NextRequest
+): Promise<{ sellerId: string } | { error: string }> {
+  const override = process.env.SELLER_ID;
+  if (override) return { sellerId: override };
+
+  const fosId = getFosId(request);
+  if (!fosId) return { error: "trader context missing" };
+
+  const sellerId = await resolveSellerIdFromFos(fosId);
+  if (!sellerId) return { error: "no seller found for this trader" };
+  return { sellerId };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +58,11 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: "phone is required" }, { status: 400 });
     }
 
-    const sellerId = getSellerId(request);
-    if (!sellerId) {
-      return Response.json({ error: "seller context missing" }, { status: 400 });
+    const resolved = await resolveSeller(request);
+    if ("error" in resolved) {
+      return Response.json({ error: resolved.error }, { status: 400 });
     }
+    const sellerId = resolved.sellerId;
 
     const [cartItems, excluded] = await Promise.all([
       fetchCartFromMySQL(phone, sellerId),
@@ -77,10 +96,11 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "phone is required" }, { status: 400 });
     }
 
-    const sellerId = getSellerId(request);
-    if (!sellerId) {
-      return Response.json({ error: "seller context missing" }, { status: 400 });
+    const resolved = await resolveSeller(request);
+    if ("error" in resolved) {
+      return Response.json({ error: resolved.error }, { status: 400 });
     }
+    const sellerId = resolved.sellerId;
 
     const { phone, quantities, discounts } = body as {
       phone: string;

@@ -2,8 +2,39 @@ import { RowDataPacket } from "mysql2";
 import { CartExclusions, CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
-// sellerId is the authenticated trader's seller (Gateway-injected `Seller-Id`),
-// NOT a hardcoded constant — a fixed seller returns an empty cart for traders
+// Resolve the trader's seller from their fosId via the canonical org mapping:
+//   fosId -> fos_users.dsId -> seller_master(fmWarehouseId = dsId,
+//                                            sellerType = 'BRAND_AGGREGATORS').userID
+// A DS's other sellers are PRODUCTION_FACTORIES, so the BRAND_AGGREGATORS filter
+// makes this unambiguous (exactly one per DS); >1 is flagged as a misconfig.
+// Returns the sellerId as a string, or null if the fosId / DS / seller isn't found.
+export async function resolveSellerIdFromFos(
+  fosId: string
+): Promise<string | null> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `
+  SELECT sm.userID AS sellerId
+  FROM fos_users fu
+  INNER JOIN seller_master sm
+          ON sm.fmWarehouseId = fu.dsId
+         AND sm.sellerType = 'BRAND_AGGREGATORS'
+  WHERE fu.fosId = ?
+  LIMIT 5;
+    `,
+    [fosId]
+  );
+  if (rows.length === 0) return null;
+  if (rows.length > 1) {
+    console.warn(
+      `[seller-resolve] fosId ${fosId} maps to ${rows.length} BRAND_AGGREGATORS sellers (DS misconfig?); using ${rows[0].sellerId}`
+    );
+  }
+  return rows[0].sellerId != null ? String(rows[0].sellerId) : null;
+}
+
+// The `sellerId` below is resolved from the trader's fosId (resolveSellerIdFromFos)
+// — NOT a hardcoded constant; a fixed seller returns an empty cart for traders
 // whose stock lives under a different seller.
 export async function fetchCartFromMySQL(
   phone: string,
