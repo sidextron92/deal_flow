@@ -70,14 +70,19 @@ SELECT sm.userID AS sellerId
 FROM fos_users fu
 INNER JOIN seller_master sm
         ON sm.fmWarehouseId = fu.dsId
-       AND sm.sellerType = 'BRAND_AGGREGATORS'
+       AND sm.sellerType     = 'BRAND_AGGREGATORS'
+       AND sm.factoryType    = 'darkstore'
+       AND sm.isProductActive = 1
 WHERE fu.fosId = ?
 LIMIT 5;
 ```
-The `BRAND_AGGREGATORS` filter is **required**: a warehouse (`fmWarehouseId`)
-usually has several `seller_master` rows (also `PRODUCTION_FACTORIES` etc.); only
-the aggregator is the DS's seller. Exactly one aggregator per DS in practice.
-Verified: `fosId 100116 → dsId 35 → 1490494483`, `fosId 6018 → dsId 10 → 1490488240`.
+All four conditions are the **exact dark-store definition** and each matters: a
+warehouse holds several `seller_master` rows (`PRODUCTION_FACTORIES`, non-darkstore
+aggregators…), and `isProductActive=1` skips deactivated dark stores. Verified
+against prod: with the full filter every resolving FOS maps to **exactly one**
+active DS (no ambiguity); `fosId 100116 → dsId 35 → 1490494483`,
+`6018 → 10 → 1490488240`. FOS whose `dsId` has no active dark store (incl. ~93%
+with a null `dsId`) resolve to `null` → `400 "no seller found for this trader"`.
 
 ### The cart — `lib/services/mysql.ts` → `fetchCartFromMySQL(phone, sellerId)`
 Reads `truck_items` joined to the catalog tables above, filtered by:

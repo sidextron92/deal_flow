@@ -3,11 +3,15 @@ import { CartExclusions, CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
 // Resolve the trader's seller from their fosId via the canonical org mapping:
-//   fosId -> fos_users.dsId -> seller_master(fmWarehouseId = dsId,
-//                                            sellerType = 'BRAND_AGGREGATORS').userID
-// A DS's other sellers are PRODUCTION_FACTORIES, so the BRAND_AGGREGATORS filter
-// makes this unambiguous (exactly one per DS); >1 is flagged as a misconfig.
-// Returns the sellerId as a string, or null if the fosId / DS / seller isn't found.
+//   fosId -> fos_users.dsId -> the dark store's seller in seller_master.
+// The DS is matched by the EXACT dark-store definition:
+//   fmWarehouseId = dsId AND sellerType = 'BRAND_AGGREGATORS'
+//   AND factoryType = 'darkstore' AND isProductActive = 1
+// (a warehouse also holds PRODUCTION_FACTORIES etc., and the factoryType +
+// isProductActive filters skip both non-darkstore aggregators and DEACTIVATED
+// dark stores, and disambiguate the rare warehouse with >1 aggregator). userID
+// of that row is the sellerId. A surviving >1 match is still flagged as misconfig.
+// Returns the sellerId as a string, or null if the fosId / active DS isn't found.
 export async function resolveSellerIdFromFos(
   fosId: string
 ): Promise<string | null> {
@@ -19,6 +23,8 @@ export async function resolveSellerIdFromFos(
   INNER JOIN seller_master sm
           ON sm.fmWarehouseId = fu.dsId
          AND sm.sellerType = 'BRAND_AGGREGATORS'
+         AND sm.factoryType = 'darkstore'
+         AND sm.isProductActive = 1
   WHERE fu.fosId = ?
   LIMIT 5;
     `,
