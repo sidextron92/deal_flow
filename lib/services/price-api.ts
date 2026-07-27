@@ -110,6 +110,7 @@ export async function fetchPriceFromAPI(
     userid: "",
     sellerid: "",
     fmWarehouseid: "",
+    truckid: 0,
     productId: 0,
     variantid,
     sizeid,

@@ -2,6 +2,7 @@ export interface CartItemRaw {
   userid: string;
   sellerid: string;
   fmWarehouseid: string;
+  truckid: number;
   productId: number;
   variantid: number;
   sizeid: number;

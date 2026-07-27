@@ -3,9 +3,8 @@ import { getPool } from "@/lib/db";
 import { DiscountEligibleSku, DiscountEligibleSkuRaw } from "@/lib/types";
 import { fetchPricesForItems } from "./price-api";
 
-const DISCOUNT_ELIGIBLE_WAREHOUSE_ID = 31;
-
 export async function fetchDiscountEligibleSkus(
+  warehouseId: number,
   destinationPincode: string
 ): Promise<DiscountEligibleSku[]> {
   const pool = getPool();
@@ -44,7 +43,7 @@ SELECT
     AND (psds.endDate IS NULL OR psds.endDate > CURDATE())
 ORDER BY psds.warehouseId, psds.variantId;
     `,
-    [DISCOUNT_ELIGIBLE_WAREHOUSE_ID]
+    [warehouseId]
   );
 
   const skus = rows as unknown as DiscountEligibleSkuRaw[];

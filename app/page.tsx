@@ -48,7 +48,7 @@ function excludedCount(excluded?: CartExclusions): number {
 // string or a bare "Failed". `kind` picks the verb; `status`/`apiError` pick the
 // cause.
 function friendlyError(
-  kind: "cart" | "recalc" | "skus",
+  kind: "cart" | "recalc" | "skus" | "deal",
   status: number,
   apiError?: string
 ): string {
@@ -67,7 +67,9 @@ function friendlyError(
       ? "recalculate the deal"
       : kind === "skus"
         ? "load discount-eligible SKUs"
-        : "load this cart";
+        : kind === "deal"
+          ? "save the deal"
+          : "load this cart";
   if (status >= 500)
     return `We couldn't ${what} right now. Please try again in a moment.`;
   return `We couldn't ${what}. Please try again.`;
@@ -113,13 +115,26 @@ function computeItemState(
 export default function Home() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [data, setData] = useState<CartResponse | null>(null);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+    visible: boolean;
+  } | null>(null);
+
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (!toast?.visible) return;
+    const timer = setTimeout(() => {
+      setToast((prev) => (prev ? { ...prev, visible: false } : null));
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [toast?.message, toast?.type, toast?.visible]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [discounts, setDiscounts] = useState<
-    Record<string, { amount: number; pct: number }>
-  >({});
-  const [baselineDiscounts, setBaselineDiscounts] = useState<
     Record<string, { amount: number; pct: number }>
   >({});
   const [cartLevelDiscount, setCartLevelDiscount] = useState(0);
@@ -138,41 +153,43 @@ export default function Home() {
   const cartPincode = data?.items.find((item) => item.pincode)?.pincode ?? "";
   const showDiscountEligibleCta = Boolean(cartPincode);
 
+  const showToast = useCallback(
+    (message: string, type: "success" | "error") => {
+      setToast({ message, type, visible: true });
+    },
+    []
+  );
+
   const loadCart = useCallback(async (phoneNumber: string) => {
     setLoading(true);
-    setError(null);
+    setToast(null);
     try {
       const res = await fetch(apiPath(`/api/cart?phone=${phoneNumber}`));
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(friendlyError("cart", res.status, json?.error));
+        showToast(friendlyError("cart", res.status, json?.error), "error");
         setData(null);
         setQuantities({});
         setDiscounts({});
-        setBaselineDiscounts({});
         setCartLevelDiscount(0);
         return;
       }
       setData(json);
       const qtyMap: Record<string, number> = {};
       const discMap: Record<string, { amount: number; pct: number }> = {};
-      const baselineDiscMap: Record<string, { amount: number; pct: number }> = {};
       json.items.forEach((item: CalculatedCartItem) => {
         const key = toKey(item);
         qtyMap[key] = item.setCount;
         discMap[key] = { amount: 0, pct: 0 };
-        baselineDiscMap[key] = { amount: 0, pct: 0 };
       });
       setQuantities(qtyMap);
       setDiscounts(discMap);
-      setBaselineDiscounts(baselineDiscMap);
       setCartLevelDiscount(0);
     } catch {
-      setError(NETWORK_ERROR);
+      showToast(NETWORK_ERROR, "error");
       setData(null);
       setQuantities({});
       setDiscounts({});
-      setBaselineDiscounts({});
       setCartLevelDiscount(0);
     } finally {
       setLoading(false);
@@ -221,14 +238,14 @@ export default function Home() {
     }
   }
 
-  async function recalculateDeal() {
+  async function createDeal() {
     if (!data) return;
-    setLoading(true);
-    setError(null);
+    setSaving(true);
+    setToast(null);
     try {
-      let remainingCartDiscount = localSummary?.cartLevelDiscountAmount ?? 0;
       const payload = {
         phone: data.phone,
+        truckid: data.items[0]?.truckid,
         quantities: data.items.map((item) => {
           const key = toKey(item);
           return {
@@ -239,47 +256,40 @@ export default function Home() {
         }),
         discounts: data.items.map((item): DiscountOverride => {
           const key = toKey(item);
-          const setCount = quantities[key] ?? item.setCount;
-          const baseAmount = discounts[key]?.amount ?? 0;
-          const state = computeItemState(item, setCount, baseAmount);
-          const extraAmount = Math.min(
-            Math.max(0, state.maxAmount - state.clampedDiscount),
-            remainingCartDiscount
-          );
-          remainingCartDiscount -= extraAmount;
           return {
             variantid: item.variantid,
             sizeid: item.sizeid,
-            amount: state.clampedDiscount + extraAmount,
+            amount: discounts[key]?.amount ?? 0,
           };
         }),
+        summary: {
+          cartLevelDiscountAmount: localSummary?.cartLevelDiscountAmount ?? 0,
+          maxCartDiscountAmount: localSummary?.maxCartDiscountAmount ?? 0,
+          maxCartDiscountPct: localSummary?.maxCartDiscountPct ?? 0,
+          finalDealPrice: localSummary?.finalDealPrice ?? 0,
+          marginAfterDiscountPct: localSummary?.marginAfterDiscountPct ?? 0,
+        },
       };
-      const res = await fetch(apiPath("/api/cart"), {
+      const res = await fetch(apiPath("/api/deals"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(friendlyError("recalc", res.status, json?.error));
+        showToast(friendlyError("deal", res.status, json?.error), "error");
         return;
       }
-      setData(json);
-      const qtyMap: Record<string, number> = {};
-      const discMap: Record<string, { amount: number; pct: number }> = {};
-      json.items.forEach((item: CalculatedCartItem) => {
-        const key = toKey(item);
-        qtyMap[key] = item.setCount;
-        discMap[key] = { amount: item.discountAmount, pct: item.discountPct };
-      });
-      setQuantities(qtyMap);
-      setDiscounts(discMap);
-      setBaselineDiscounts(discMap);
-      setCartLevelDiscount(0);
+      showToast(
+        json?.action === "updated"
+          ? "Deal updated successfully!"
+          : "Deal created successfully!",
+        "success"
+      );
     } catch {
-      setError(NETWORK_ERROR);
+      showToast(NETWORK_ERROR, "error");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -292,6 +302,10 @@ export default function Home() {
   }
 
   function setQuantity(key: string, rawValue: string, maxStock: number) {
+    if (rawValue === "") {
+      setQuantities((prev) => ({ ...prev, [key]: 0 }));
+      return;
+    }
     const value = Number(rawValue);
     const next = Number.isNaN(value) ? 0 : Math.max(0, Math.min(value, maxStock));
     setQuantities((prev) => ({ ...prev, [key]: next }));
@@ -306,6 +320,11 @@ export default function Home() {
       setCount,
       discounts[key]?.amount ?? 0
     );
+    // Allow empty string so the user can clear the input
+    if (rawValue === "") {
+      setDiscounts((prev) => ({ ...prev, [key]: { amount: 0, pct: 0 } }));
+      return;
+    }
     let perUnitAmount = Number(rawValue);
     if (Number.isNaN(perUnitAmount)) perUnitAmount = 0;
     const perUnitMax = pieces > 0 ? maxAmount / pieces : 0;
@@ -324,6 +343,11 @@ export default function Home() {
       setCount,
       discounts[key]?.amount ?? 0
     );
+    // Allow empty string so the user can clear the input
+    if (rawValue === "") {
+      setDiscounts((prev) => ({ ...prev, [key]: { amount: 0, pct: 0 } }));
+      return;
+    }
     let pct = Number(rawValue);
     if (Number.isNaN(pct)) pct = 0;
     pct = Math.max(0, Math.min(pct, item.maxDiscountPct));
@@ -355,13 +379,16 @@ export default function Home() {
       setData(null);
       setQuantities({});
       setDiscounts({});
-      setBaselineDiscounts({});
       setCartLevelDiscount(0);
-      setError(null);
+      setToast(null);
     }
   }
 
   function updateCartLevelDiscount(rawValue: string) {
+    if (rawValue === "") {
+      setCartLevelDiscount(0);
+      return;
+    }
     const value = Number(rawValue);
     const next = Number.isNaN(value) ? 0 : value;
     setCartLevelDiscount(
@@ -416,28 +443,6 @@ export default function Home() {
       cartLevelDiscountCap,
       cartLevelDiscountAmount,
     };
-  })();
-
-  const hasChanges = (() => {
-    if (!data) return false;
-    return data.items.some((item) => {
-      const key = toKey(item);
-      const q = quantities[key] ?? item.setCount;
-      const d = discounts[key] ?? {
-        amount: 0,
-        pct: 0,
-      };
-      const baseline = baselineDiscounts[key] ?? {
-        amount: 0,
-        pct: 0,
-      };
-      return (
-        q !== item.setCount ||
-        Math.round(d.amount) !== Math.round(baseline.amount) ||
-        Number(d.pct.toFixed(2)) !== Number(baseline.pct.toFixed(2)) ||
-        (localSummary?.cartLevelDiscountAmount ?? 0) > 0
-      );
-    });
   })();
 
   const discountSkuCategoryOptions = Array.from(
@@ -527,15 +532,26 @@ export default function Home() {
           )}
         </section>
 
-        {loading && (
-          <div className="rounded-3xl border border-white/70 bg-white/85 p-10 text-center text-sm font-semibold text-zinc-500 shadow-sm ring-1 ring-black/5 lg:col-span-2">
-            Loading cart...
+        {/* Toast Notification */}
+        {toast?.visible && (
+          <div className="fixed left-0 right-0 top-0 z-50 flex justify-center px-4 pt-4">
+            <div
+              className={`transform transition-all duration-300 ease-out ${
+                toast.visible ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"
+              } rounded-2xl px-6 py-3 text-sm font-bold shadow-lg ring-1 backdrop-blur-xl ${
+                toast.type === "success"
+                  ? "bg-green-50/95 text-green-800 ring-green-200"
+                  : "bg-red-50/95 text-red-800 ring-red-200"
+              }`}
+            >
+              {toast.message}
+            </div>
           </div>
         )}
 
-        {error && (
-          <div className="rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700 ring-1 ring-red-200 lg:col-span-2">
-            {error}
+        {(loading || saving) && (
+          <div className="rounded-3xl border border-white/70 bg-white/85 p-10 text-center text-sm font-semibold text-zinc-500 shadow-sm ring-1 ring-black/5 lg:col-span-2">
+            {saving ? "Saving deal..." : "Loading cart..."}
           </div>
         )}
 
@@ -620,6 +636,7 @@ export default function Home() {
                       setCount,
                       discount.amount
                     );
+                    const isDiscountEligible = item.eligibleDiscount > 0;
 
                     return (
                       <article
@@ -677,7 +694,7 @@ export default function Home() {
                                 inputMode="numeric"
                                 min={0}
                                 max={item.CurrentInventory}
-                                value={setCount}
+                                value={setCount === 0 ? "" : setCount}
                                 onChange={(e) =>
                                   setQuantity(
                                     key,
@@ -714,32 +731,35 @@ export default function Home() {
                             total={state.totalValue}
                           />
 
-                          <div className="flex items-center justify-between">
-                            <span className="text-zinc-500">
-                              Bijnis Margin / unit
-                            </span>
-                            <span
-                              className={`font-semibold ${
-                                state.profitMarginPct >= 15
-                                  ? "text-green-700"
-                                  : state.profitMarginPct >= 5
-                                  ? "text-amber-700"
-                                  : "text-red-700"
-                              }`}
-                            >
-                              {formatCurrency(
-                                state.pieces > 0
-                                  ? state.profitAmount / state.pieces
-                                  : 0
-                              )}
-                              <span className="ml-1 text-xs">
-                                ({formatPct(state.profitMarginPct)})
+                          {isDiscountEligible && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-zinc-500">
+                                Bijnis Margin / unit
                               </span>
-                            </span>
-                          </div>
+                              <span
+                                className={`font-semibold ${
+                                  state.profitMarginPct >= 15
+                                    ? "text-green-700"
+                                    : state.profitMarginPct >= 5
+                                    ? "text-amber-700"
+                                    : "text-red-700"
+                                }`}
+                              >
+                                {formatCurrency(
+                                  state.pieces > 0
+                                    ? state.profitAmount / state.pieces
+                                    : 0
+                                )}
+                                <span className="ml-1 text-xs">
+                                  ({formatPct(state.profitMarginPct)})
+                                </span>
+                              </span>
+                            </div>
+                          )}
 
                           {/* Editable Max Discount */}
-                          <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200/80">
+                          {isDiscountEligible && (
+                            <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-200/80">
                             <div className="flex items-center justify-between">
                               <span className="font-bold text-zinc-800">
                                 Max Discount
@@ -774,11 +794,15 @@ export default function Home() {
                                     type="number"
                                     inputMode="numeric"
                                     min={0}
-                                    value={Math.round(
-                                      state.pieces > 0
-                                        ? discount.amount / state.pieces
-                                        : 0
-                                    )}
+                                    value={
+                                      discount.amount === 0
+                                        ? ""
+                                        : Math.round(
+                                            state.pieces > 0
+                                              ? discount.amount / state.pieces
+                                              : 0
+                                          )
+                                    }
                                     onChange={(e) =>
                                       updateDiscountAmount(key, e.target.value)
                                     }
@@ -796,7 +820,11 @@ export default function Home() {
                                     inputMode="decimal"
                                     min={0}
                                     step={0.1}
-                                    value={discount.pct.toFixed(1)}
+                                    value={
+                                      discount.pct === 0
+                                        ? ""
+                                        : discount.pct.toFixed(1)
+                                    }
                                     onChange={(e) =>
                                       updateDiscountPct(key, e.target.value)
                                     }
@@ -815,10 +843,12 @@ export default function Home() {
                               {formatPct(item.maxDiscountPct)})
                             </p>
                           </div>
+                          )}
                         </div>
 
                         {/* After Discount */}
-                        <div className="border-t border-green-900/10 bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-3 sm:px-5">
+                        {isDiscountEligible && (
+                          <div className="border-t border-green-900/10 bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-3 sm:px-5">
                           <p className="text-xs font-black uppercase tracking-[0.2em] text-green-800">
                             After Discount
                           </p>
@@ -853,6 +883,7 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
+                        )}
                       </article>
                     );
                   })}
@@ -928,9 +959,11 @@ export default function Home() {
                               inputMode="numeric"
                               min={0}
                               max={Math.round(localSummary.cartLevelDiscountCap)}
-                              value={Math.round(
-                                localSummary.cartLevelDiscountAmount
-                              )}
+                              value={
+                                localSummary.cartLevelDiscountAmount === 0
+                                  ? ""
+                                  : Math.round(localSummary.cartLevelDiscountAmount)
+                              }
                               onChange={(e) =>
                                 updateCartLevelDiscount(e.target.value)
                               }
@@ -972,17 +1005,17 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            {hasChanges && (
-              <p className="mb-2 text-center text-xs font-semibold text-zinc-500">
-                Tap recalculate to lock in updated quantities/discounts.
-              </p>
-            )}
             <button
-              onClick={recalculateDeal}
-              disabled={!hasChanges}
+              onClick={() => {
+                if (saving) return;
+                createDeal();
+              }}
+              disabled={
+                saving || (localSummary?.maxCartDiscountAmount ?? 0) === 0
+              }
               className="w-full rounded-2xl bg-zinc-950 py-4 text-base font-black text-white shadow-lg shadow-zinc-950/20 transition active:scale-[0.99] active:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none"
             >
-              {hasChanges ? "Recalculate Deal" : "Deal Up-to-date"}
+              {saving ? "Saving..." : "Create Deal"}
             </button>
           </div>
         </div>

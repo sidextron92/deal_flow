@@ -2,8 +2,10 @@
 
 Context for anyone (human or AI) picking up deal_flow work. It documents the DB
 tables this project reads, how they relate, and the two queries that drive the
-feature. **DB: `shoekonnect_live` (AWS Aurora MySQL).** deal_flow is **read-only**
-against it — no writes anywhere.
+feature. **DB: `shoekonnect_live` (AWS Aurora MySQL).**
+
+deal_flow is **read-only** against most tables, but **writes** to `liquidation_deals`
+when a trader clicks "Create Deal".
 
 > Provenance: everything below was verified by querying prod (read-only) during
 > development, except the one item explicitly marked "unconfirmed". If you extend
@@ -128,8 +130,8 @@ only to distinguish "unknown number" from "no cart under this DS".
   pincode-specific `landingPrice` / `landingPriceBeforeTax` per item; falls back to
   the row's own `MRP`/`transferPrice` if a variant is missing.
 - **Discount-eligible SKUs** — `/api/discount-eligible-skus?pincode=…` →
-  `fetchDiscountEligibleSkus(pincode)` (queries `pre_shelfout_discount_skus` +
-  catalog). Not seller-scoped; only needs `pincode` + Auth-Key.
+  `fetchDiscountEligibleSkus(warehouseId, pincode)` (queries `pre_shelfout_discount_skus` +
+  catalog). Scoped to the trader's resolved `fmWarehouseId` (via `fosId` → `dsId`).
 
 ---
 

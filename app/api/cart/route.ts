@@ -3,6 +3,7 @@ import {
   fetchCartExclusions,
   fetchCartFromMySQL,
   resolveSellerIdFromFos,
+  resolveWarehouseIdFromSellerId,
   retailerExists,
 } from "@/lib/services/mysql";
 import { fetchPricesForCart } from "@/lib/services/price-api";
@@ -15,21 +16,24 @@ import {
 } from "@/lib/types";
 import { checkAuthKey, getFosId } from "@/lib/auth";
 
-// Resolve the trader's seller: a local-dev SELLER_ID override wins, otherwise
-// derive it from the (gateway-injected, un-spoofable) fosId via the DS mapping.
-// Returns { sellerId } on success, or { error } describing why it couldn't.
+// Resolve the trader's seller + warehouse: a local-dev SELLER_ID override wins,
+// otherwise derive from the gateway-injected fosId via the DS mapping.
 async function resolveSeller(
   request: NextRequest
-): Promise<{ sellerId: string } | { error: string }> {
+): Promise<{ sellerId: string; warehouseId: string } | { error: string }> {
   const override = process.env.SELLER_ID;
-  if (override) return { sellerId: override };
+  if (override) {
+    const warehouseId = await resolveWarehouseIdFromSellerId(override);
+    if (!warehouseId) return { error: "no warehouse found for override seller" };
+    return { sellerId: override, warehouseId };
+  }
 
   const fosId = getFosId(request);
   if (!fosId) return { error: "trader context missing" };
 
-  const sellerId = await resolveSellerIdFromFos(fosId);
-  if (!sellerId) return { error: "no seller found for this trader" };
-  return { sellerId };
+  const resolved = await resolveSellerIdFromFos(fosId);
+  if (!resolved) return { error: "no seller found for this trader" };
+  return resolved;
 }
 
 export const dynamic = "force-dynamic";

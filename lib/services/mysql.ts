@@ -2,23 +2,21 @@ import { RowDataPacket } from "mysql2";
 import { CartExclusions, CartItemRaw } from "@/lib/types";
 import { getPool } from "@/lib/db";
 
-// Resolve the trader's seller from their fosId via the canonical org mapping:
+// Resolve the trader's seller AND warehouse from their fosId via the canonical
+// org mapping:
 //   fosId -> fos_users.dsId -> the dark store's seller in seller_master.
 // The DS is matched by the EXACT dark-store definition:
 //   fmWarehouseId = dsId AND sellerType = 'BRAND_AGGREGATORS'
 //   AND factoryType = 'darkstore' AND isProductActive = 1
-// (a warehouse also holds PRODUCTION_FACTORIES etc., and the factoryType +
-// isProductActive filters skip both non-darkstore aggregators and DEACTIVATED
-// dark stores, and disambiguate the rare warehouse with >1 aggregator). userID
-// of that row is the sellerId. A surviving >1 match is still flagged as misconfig.
-// Returns the sellerId as a string, or null if the fosId / active DS isn't found.
+// Returns { sellerId, warehouseId } on success, or null if the fosId / active
+// DS isn't found.
 export async function resolveSellerIdFromFos(
   fosId: string
-): Promise<string | null> {
+): Promise<{ sellerId: string; warehouseId: string } | null> {
   const pool = getPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     `
-  SELECT sm.userID AS sellerId
+  SELECT sm.userID AS sellerId, fu.dsId AS warehouseId
   FROM fos_users fu
   INNER JOIN seller_master sm
           ON sm.fmWarehouseId = fu.dsId
@@ -36,7 +34,25 @@ export async function resolveSellerIdFromFos(
       `[seller-resolve] fosId ${fosId} maps to ${rows.length} BRAND_AGGREGATORS sellers (DS misconfig?); using ${rows[0].sellerId}`
     );
   }
-  return rows[0].sellerId != null ? String(rows[0].sellerId) : null;
+  const sellerId = rows[0].sellerId != null ? String(rows[0].sellerId) : null;
+  const warehouseId =
+    rows[0].warehouseId != null ? String(rows[0].warehouseId) : null;
+  if (!sellerId || !warehouseId) return null;
+  return { sellerId, warehouseId };
+}
+
+// Lookup warehouseId from a sellerId (used for local-dev SELLER_ID override).
+export async function resolveWarehouseIdFromSellerId(
+  sellerId: string
+): Promise<string | null> {
+  const pool = getPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT fmWarehouseId FROM seller_master WHERE userID = ? LIMIT 1`,
+    [sellerId]
+  );
+  return rows[0]?.fmWarehouseId != null
+    ? String(rows[0].fmWarehouseId)
+    : null;
 }
 
 // The `sellerId` below is resolved from the trader's fosId (resolveSellerIdFromFos)
@@ -54,13 +70,14 @@ export async function fetchCartFromMySQL(
     ti.userID                        AS userid,
     ti.sellerID                      AS sellerid,
     sma.fmWarehouseId                AS fmWarehouseid,
+    ti.truckID                       AS truckid,
     ti.productID                     AS productId,
     ti.variantID                     AS variantid,
     ti.sizeID                        AS sizeid,
     ti.setCount                      AS setCount,
     ti.setSize                       AS lotSize,
     p.mrp                            AS MRP,
-    p.transferPrice                  AS purchasePriceWithoutTax,
+    COALESCE(psds.tpWithoutTax, p.transferPrice) AS purchasePriceWithoutTax,
     0                                AS retailerMargin,
     p.productName                    AS ProductName,
     c.colorName                      AS colorname,
