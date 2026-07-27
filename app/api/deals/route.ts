@@ -171,11 +171,15 @@ export async function POST(request: NextRequest) {
       action: isUpdate ? "updated" : "created",
     });
   } catch (err) {
-    console.error("[API /deals POST] Error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : "";
+    console.error("[API /deals POST] 500 Error:", message);
+    if (stack) console.error("[API /deals POST] Stack:", stack);
     return Response.json(
       {
         error: "Failed to save deal",
-        detail: err instanceof Error ? err.message : String(err),
+        detail: message,
+        stack: process.env.NODE_ENV === "development" ? stack : undefined,
       },
       { status: 500 }
     );
