@@ -6,17 +6,18 @@
 # needs only prod AWS creds + Docker + this repo. NO config.env / secrets —
 # the DB creds and AUTH_KEY already live in SSM (set once by 01-provision).
 #
-# It builds an arm64 image tagged with the git short SHA, pushes it to ECR,
-# pins that image in SSM (/deal-flow/prod/IMAGE), then uses SSM Run Command
-# to (re)install a self-healing run.sh, restart the container, and health-check
-# — all without SSH or a bastion.
+# ONLY the tip of origin/main is ever deployed. It fetches origin/main, builds
+# that exact committed tree in an isolated git worktree (your current branch /
+# uncommitted changes are IGNORED — no one can deploy a feature branch), tags the
+# arm64 image with origin/main's short SHA, pushes it to ECR, pins it in SSM
+# (/deal-flow/prod/IMAGE), then uses SSM Run Command to (re)install a self-healing
+# run.sh, restart the container, and health-check — all without SSH or a bastion.
 #
-#   bash deploy/aws/deploy.sh                 # build HEAD, deploy, health-check
-#   bash deploy/aws/deploy.sh --dry-run       # print the plan, touch nothing
+#   bash deploy/aws/deploy.sh                 # deploy the tip of origin/main, health-check
+#   bash deploy/aws/deploy.sh --dry-run       # print the plan (which origin/main sha), touch nothing
 #   bash deploy/aws/deploy.sh --tag <sha>     # redeploy/ROLLBACK an existing ECR tag (no build)
 #   bash deploy/aws/deploy.sh --yes           # skip the confirm prompt (CI)
-#   bash deploy/aws/deploy.sh --allow-dirty   # build from a dirty tree (tag gets -dirty-<ts>)
-#   bash deploy/aws/deploy.sh --force-build   # rebuild even if the SHA tag already exists
+#   bash deploy/aws/deploy.sh --force-build   # rebuild even if the origin/main sha is already in ECR
 #
 # Exit 0 = deployed and healthy. Non-zero = aborted or unhealthy (see output).
 # ---------------------------------------------------------------------------
@@ -30,15 +31,15 @@ ECR_REPO="deal-flow"
 ECR_URI="$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO"
 INSTANCE_NAME="deal-flow"
 SSM_PREFIX="/deal-flow/prod"
+DEPLOY_BRANCH="main"     # the ONLY branch that is ever built/deployed
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # …/deal_flow
 
 # --- flags ------------------------------------------------------------------
-DRY_RUN=0; ASSUME_YES=0; ALLOW_DIRTY=0; FORCE_BUILD=0; TAG_OVERRIDE=""
+DRY_RUN=0; ASSUME_YES=0; FORCE_BUILD=0; TAG_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)     DRY_RUN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
-    --allow-dirty) ALLOW_DIRTY=1 ;;
     --force-build) FORCE_BUILD=1 ;;
     --tag)         TAG_OVERRIDE="${2:-}"; shift ;;
     --tag=*)       TAG_OVERRIDE="${1#*=}" ;;
@@ -71,8 +72,8 @@ IID="$(aws ec2 describe-instances \
 [ "$(printf '%s\n' "$IID" | wc -w)" -eq 1 ] || die "multiple running instances tagged $INSTANCE_NAME: $IID — resolve manually."
 ok "instance $IID"
 
-# --- 2. resolve the image tag ----------------------------------------------
-c_hdr "2. image tag"
+# --- 2. resolve the image tag (source of truth = origin/DEPLOY_BRANCH) -------
+c_hdr "2. image tag (source: origin/$DEPLOY_BRANCH)"
 SKIP_BUILD=0
 if [ -n "$TAG_OVERRIDE" ]; then
   TAG="$TAG_OVERRIDE"; SKIP_BUILD=1
@@ -80,16 +81,15 @@ if [ -n "$TAG_OVERRIDE" ]; then
     || die "tag '$TAG' not found in ECR $ECR_REPO — can only --tag an image that was already pushed."
   info "redeploying existing tag $TAG (no build)"
 else
-  SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo nogit)"
-  if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
-    [ "$ALLOW_DIRTY" -eq 1 ] || die "working tree is dirty — commit first, or pass --allow-dirty."
-    TAG="${SHA}-dirty-$(date +%Y%m%d%H%M%S)"
-    warn "dirty tree → tag $TAG (not reproducible)"
-  else
-    TAG="$SHA"
-    if [ "$FORCE_BUILD" -eq 0 ] && aws ecr describe-images --repository-name "$ECR_REPO" --image-ids imageTag="$TAG" --region "$AWS_REGION" >/dev/null 2>&1; then
-      SKIP_BUILD=1; info "image $TAG already in ECR (clean tree) → reuse, skip build. (--force-build to rebuild.)"
-    fi
+  # ONLY the tip of origin/main is deployable — tag by ITS sha, never the
+  # operator's local HEAD / current branch / working tree.
+  git -C "$REPO_ROOT" fetch --quiet origin "$DEPLOY_BRANCH" 2>/dev/null \
+    || die "git fetch origin $DEPLOY_BRANCH failed (need repo access + network)."
+  TAG="$(git -C "$REPO_ROOT" rev-parse --short "origin/$DEPLOY_BRANCH" 2>/dev/null)"
+  [ -n "$TAG" ] || die "could not resolve origin/$DEPLOY_BRANCH."
+  info "deploying origin/$DEPLOY_BRANCH @ $TAG"
+  if [ "$FORCE_BUILD" -eq 0 ] && aws ecr describe-images --repository-name "$ECR_REPO" --image-ids imageTag="$TAG" --region "$AWS_REGION" >/dev/null 2>&1; then
+    SKIP_BUILD=1; info "image $TAG already in ECR → reuse, skip build. (--force-build to rebuild.)"
   fi
 fi
 IMAGE="$ECR_URI:$TAG"
@@ -100,6 +100,7 @@ PREV="$(aws ssm get-parameter --name "$SSM_PREFIX/IMAGE" --region "$AWS_REGION" 
 # --- plan + confirm ---------------------------------------------------------
 c_hdr "plan"
 info "instance : $IID"
+[ -n "$TAG_OVERRIDE" ] && info "source   : ECR tag $TAG (rollback, no build)" || info "source   : origin/$DEPLOY_BRANCH @ $TAG (only this branch is deployable)"
 info "new image: $IMAGE"
 info "current  : ${PREV:-<none / first SSM-driven deploy>}"
 info "build    : $( [ "$SKIP_BUILD" -eq 1 ] && echo 'skip (reuse existing)' || echo 'yes (arm64)' )"
@@ -111,12 +112,21 @@ fi
 
 # --- 4. build + push --------------------------------------------------------
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  c_hdr "3. build (linux/arm64) + push"
-  run docker build --platform linux/arm64 -t "$IMAGE" "$REPO_ROOT" || die "docker build failed"
+  c_hdr "3. build (linux/arm64) + push  [origin/$DEPLOY_BRANCH @ $TAG]"
+  # Build the EXACT committed tree of origin/main in a throwaway worktree, so the
+  # operator's current branch / uncommitted changes can never reach prod.
+  BUILD_DIR="$(mktemp -d)"
+  git -C "$REPO_ROOT" worktree add --quiet --detach "$BUILD_DIR" "origin/$DEPLOY_BRANCH" \
+    || die "could not create build worktree for origin/$DEPLOY_BRANCH"
+  trap 'git -C "$REPO_ROOT" worktree remove --force "$BUILD_DIR" 2>/dev/null; rm -rf "$BUILD_DIR"' EXIT
+  run docker build --platform linux/arm64 -t "$IMAGE" "$BUILD_DIR" || die "docker build failed"
   aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com" >/dev/null || die "ECR login failed"
   ok "logged in to ECR"
   run docker push "$IMAGE" || die "docker push failed"
   ok "pushed $IMAGE"
+  git -C "$REPO_ROOT" worktree remove --force "$BUILD_DIR" 2>/dev/null || true
+  rm -rf "$BUILD_DIR"
+  trap - EXIT
 fi
 
 # --- 5. pin the image in SSM ------------------------------------------------
