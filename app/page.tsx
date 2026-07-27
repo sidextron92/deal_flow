@@ -792,15 +792,14 @@ export default function Home() {
                                   <span className="text-zinc-500">₹</span>
                                   <input
                                     type="number"
-                                    inputMode="numeric"
+                                    inputMode="decimal"
                                     min={0}
+                                    step={0.01}
                                     value={
                                       discount.amount === 0
                                         ? ""
-                                        : Math.round(
-                                            state.pieces > 0
-                                              ? discount.amount / state.pieces
-                                              : 0
+                                        : Number(
+                                            (discount.amount / state.pieces).toFixed(2)
                                           )
                                     }
                                     onChange={(e) =>
@@ -956,13 +955,13 @@ export default function Home() {
                             <input
                               id="cart-level-discount"
                               type="number"
-                              inputMode="numeric"
+                              inputMode="decimal"
                               min={0}
-                              max={Math.round(localSummary.cartLevelDiscountCap)}
+                              step={0.01}
                               value={
                                 localSummary.cartLevelDiscountAmount === 0
                                   ? ""
-                                  : Math.round(localSummary.cartLevelDiscountAmount)
+                                  : Number(localSummary.cartLevelDiscountAmount.toFixed(2))
                               }
                               onChange={(e) =>
                                 updateCartLevelDiscount(e.target.value)
